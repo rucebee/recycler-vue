@@ -1,0 +1,32 @@
+{
+  "name": "recycler-vue",
+  "version": "0.0.1",
+  "description": "Android RecyclerView port for Vue.js",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "RecyclerView",
+    "Vue",
+    "infinite",
+    "list"
+  ],
+  "author": "rucebee",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "^7.9.0",
+    "@babel/preset-env": "^7.9.5",
+    "babel-loader": "^8.1.0",
+    "webpack": "^4.42.1"
+  },
+  "dependencies": {
+    "lodash": "^4.17.15",
+    "robo": "file:../robo"
+  },
+  "babel": {
+    "presets": [
+      "@babel/preset-env"
+    ]
+  }
+}
