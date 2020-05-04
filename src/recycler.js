@@ -8,6 +8,31 @@ const mmin = Math.min,
     NEAR_ZERO = .0001,
     NEAR_ONE = 1 - NEAR_ZERO
 
+function animate(draw, duration, timing = timeFraction => timeFraction) {
+    let start = performance.now(),
+        animateId = requestAnimationFrame(function animate(time) {
+            let timeFraction = (time - start) / duration
+            if (timeFraction > 1) timeFraction = 1
+
+            let progress = timing(timeFraction)
+
+            draw(progress)
+
+            if (timeFraction < 1) {
+                animateId = requestAnimationFrame(animate)
+            } else {
+                animateId = 0
+            }
+        })
+
+    return () => {
+        if (animateId) {
+            cancelAnimationFrame(animateId)
+            animateId = 0
+        }
+    }
+}
+
 export default function (Vue) {
     const hs = [],
         hsCache = {},
@@ -15,6 +40,7 @@ export default function (Vue) {
         BASE_NODE = document.createElement('div')
 
     let thisVm,
+        isWindow,
         updateId,
 
         itemCount,
@@ -26,13 +52,10 @@ export default function (Vue) {
         _itemTop,
         stackFromBottom,
 
-        scrollWin,
-        scrollDoc,
+        win,
+        doc,
         wrapper,
         container,
-
-        _scroll,
-        skipScroll = false,
 
         position = -1,
         offset = 0,
@@ -42,19 +65,20 @@ export default function (Vue) {
         maxOffset,
         hsOffset,
 
+        _clientHeight,
         clientHeight,
-        scrollTop,
+        scrollTop = 0,
         scrollTopMax,
         scrollRatio,
-
-        scrolling,
-        scrollStarted,
-        scrollFinishTimeout,
-        scrollTime = 0,
+        scrollHeight = 0,
+        headerHeight = 0,
+        footerHeight = 0,
+        lastHeight = 0,
 
         clueRatio, cluePosition,
 
-        scrollHeight = 0, headerHeight = 0, footerHeight = 0
+        _scroll,
+        skipScroll = false
 
     const update = () => {
             if (updateId)
@@ -72,98 +96,6 @@ export default function (Vue) {
             updateFrame()
         }
 
-    function onResize() {
-        for (let h of hs) h.height = 0
-
-        //console.log('resize', clientHeight, scrollDoc.clientHeight, scrollDoc.offsetHeight)
-
-        clientHeight = scrollDoc.clientHeight
-        scrollTopMax = mmax(0, scrollDoc.scrollHeight - clientHeight)
-
-        headerHeight = wrapper.offsetTop
-        container.style.top = -headerHeight + 'px'
-
-        footerHeight = mmax(scrollDoc.offsetHeight, scrollHeight) - headerHeight - thisVm.$el.offsetHeight
-
-        console.log({
-            clientHeight, scrollTopMax, headerHeight, footerHeight,
-            _scrollHeight: scrollDoc.scrollHeight,
-            offsetHeight: scrollDoc.offsetHeight
-        })
-
-        update()
-    }
-
-    function onScroll() {
-        if (skipScroll) {
-            skipScroll = false
-            return
-        }
-
-        if (!scrolling) {
-            scrolling = true
-
-            //console.log('scrollStart', scrollStarted)
-
-            clueRatio = itemCount ? scrollRatio : 0
-            cluePosition = maxPosition * clueRatio
-
-            if (!scrollStarted) {
-                scrollWin.addEventListener('mousemove', onScrollContinue)
-                scrollWin.addEventListener('wheel', onScrollContinue)
-
-                onScrollContinue()
-            }
-        }
-
-        if (!scrollStarted)
-            scrollTime = Date.now()
-
-        if (scrollFinishTimeout) {
-            clearTimeout(scrollFinishTimeout)
-            scrollFinishTimeout = setTimeout(onScrollFinish, 300)
-        }
-
-        // scrollTop = scrollDoc.scrollTop
-        // scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
-
-        //console.log('scroll', scrollTop, scrollTopMax, scrollRatio)
-
-        update()
-    }
-
-    function onScrollStart() {
-        scrollStarted = true
-
-        scrollTime = 0
-    }
-
-    function onScrollContinue() {
-        if (scrollFinishTimeout)
-            clearTimeout(scrollFinishTimeout)
-        scrollFinishTimeout = setTimeout(onScrollFinish, 100)
-    }
-
-    function onScrollFinish() {
-        scrollStarted = false
-
-        if (scrollFinishTimeout) {
-            clearTimeout(scrollFinishTimeout)
-            scrollFinishTimeout = 0
-        }
-
-        if (scrolling) {
-            //console.log('scrollFinish', scrollTop, scrollTopMax, scrollRatio)
-
-            scrollWin.removeEventListener('mousemove', onScrollContinue)
-            scrollWin.removeEventListener('wheel', onScrollContinue)
-
-            scrolling = false
-
-            update()
-        }
-    }
-
     function hsPop(position) {
         let h
 
@@ -171,7 +103,7 @@ export default function (Vue) {
             h = hsBindedCache[position]
             delete hsBindedCache[position]
 
-            //console.log('hsPop binded', position)
+            //console.log('binded', position)
 
             return h
         }
@@ -192,16 +124,13 @@ export default function (Vue) {
                 vm: new Vue({
                     el: BASE_NODE.cloneNode(true),
                     render: h => h(_.assign({}, itemView, {
-                        data: () => data,
-                        updated() {
-                            console.log('upd')
-                        }
+                        data: () => data
                     }))
                 }).$children[0],
                 type: itemView.type
             }
 
-            //h.vm._watcher.sync = true
+            h.vm._watcher.active = false
 
             h.view = h.vm.$el
             h.style = h.view.style
@@ -225,20 +154,18 @@ export default function (Vue) {
                 if (!h.minHeight)
                     h.minHeight = h.view.offsetHeight
             }
+
+            //console.log('create', position)
         } else {
             container.appendChild(h.view)
+
             //h.style.display = ''
 
-            //HACK: to render immediately
-            // if (h.vm.position) {
-            //     h.vm._watcher.sync = false
-            //     h.vm.position = -1
-            //
-            //     h.vm._watcher.sync = true
-            // }
+            h.vm.position = -1
             h.vm.position = position
+            h.vm._update(h.vm._render(), false)
 
-            h.vm._update(h.vm._render(), true)
+            //console.log('bind', position, h.vm.source)
         }
 
         h.position = position
@@ -249,7 +176,8 @@ export default function (Vue) {
             h.height = mmax(h.minHeight, h.maxHeight * clientHeight)
                 + h.top + (position == maxPosition ? itemBottom : 0)
 
-            //Doing it later: h.style.height = h.height + 'px'
+            //Doing it later:
+            //h.style.height = h.height + 'px'
         } else {
             h.height = h.view.offsetHeight + h.top
 
@@ -281,27 +209,45 @@ export default function (Vue) {
             hsBindedCache[i].height = 0
             hsPush(hsBindedCache[i])
         }
+
         hsBindedCache.length = 0
     }
 
     function hsInvalidate(_position, count) {
         if (hsPosition >= itemCount) {
+            lastHeight = 0
+
             for (let h of hs) h.height = 0
 
             return true
-        } else if (!count) {
-            return true;
-        } else if (_position >= hsPosition && _position <= hsPosition + hs.length
+        }
+
+        if (!count) {
+            lastHeight = 0
+
+            return true
+        }
+
+        if (_position >= hsPosition && _position <= hsPosition + hs.length
             || hsPosition >= _position && hsPosition <= _position + count) {
+
+            if (_position + count >= itemCount)
+                lastHeight = 0
 
             for (let i = mmax(0, _position - hsPosition), len = mmin(hs.length, _position - hsPosition + count); i < len; i++)
                 hs[i].height = 0
 
             return true
         }
+
+        if (_position + count >= itemCount && lastHeight) {
+            lastHeight = 0
+
+            return true
+        }
     }
 
-    function updateContainer() {
+    function updateScrollHeight() {
         let fluidCount = 0,
             fluidHeight = 0
 
@@ -325,13 +271,14 @@ export default function (Vue) {
             scrollHeight = height
 
             wrapper.style.height = (scrollHeight - headerHeight - footerHeight) + 'px'
-            clientHeight = scrollDoc.clientHeight
+            clientHeight = _clientHeight()
             scrollTopMax = mmax(0, scrollHeight - clientHeight)
 
             // console.log({
             //     clientHeight, scrollTopMax, scrollHeight,
-            //     _scrollHeight: scrollDoc.scrollHeight,
-            //     offsetHeight: scrollDoc.offsetHeight
+            //     _clientHeight: _clientHeight(),
+            //     _scrollHeight: doc.scrollHeight,
+            //     _offsetHeight: doc.offsetHeight
             // })
         }
     }
@@ -385,9 +332,6 @@ export default function (Vue) {
                 }
             }
         }
-        // else {
-        //     offsetRatio = .5
-        // }
 
         // for (const index in stats.ratios) {
         //     const ratio = stats.ratios[index]
@@ -414,19 +358,23 @@ export default function (Vue) {
         if (!itemCount) {
             hsFlush()
 
-            thisVm.$emit('laidout', 0, hs, -1)
+            thisVm.$emit('laidout', 0, hs, 0)
 
             return
         }
 
-        let h = hsPop(maxPosition),
-            up, down, i
+        let h, up, down, i
 
-        maxOffset = clientHeight - h.height
-        hsPush(h)
+        if (!lastHeight) {
+            h = hsPop(maxPosition)
+            lastHeight = h.height
+            hsPush(h)
+        }
+
+        maxOffset = clientHeight - lastHeight
 
         if (scrolling) {
-            scrollTop = scrollDoc.scrollTop
+            scrollTop = doc.scrollTop
             scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
 
             const positionReal = scrollStarted ? (
@@ -477,14 +425,6 @@ export default function (Vue) {
         up = scrollTop + hsOffset
         down = up + h.height
 
-        // if (up >= scrollTop + clientHeight) {
-        //     up = scrollTop + clientHeight - 1
-        //     down = up + h.height
-        // } else if (down <= scrollTop) {
-        //     down = scrollTop + 1
-        //     up = down - h.height
-        // }
-
         i = hsPosition
         while (i-- > 0 && up > scrollTop) {
             hs.unshift(h = hsPop(i))
@@ -523,16 +463,15 @@ export default function (Vue) {
             up = 0
 
             if (!scrolling) {
-                updateContainer()
+                updateScrollHeight()
 
                 skipScroll = true
                 _scroll(scrollTop = 0)
                 scrollRatio = 0
             }
         } else if (!scrolling) {
-            updateContainer()
+            updateScrollHeight()
 
-            //const newScrollTop = scrollTopMax * scrollRatio
             const positionReal = adjustPosition(),
                 newScrollTop = scrollTopMax * positionReal / maxPosition
 
@@ -594,7 +533,7 @@ export default function (Vue) {
                 for (i = hs.length - 1; i >= 0; i--) {
                     if (hs[i].maxHeight) {
                         position++
-                        offset -= hs[i].height
+                        offset += hs[i].height
                     } else break
                 }
             } else if (fluidCheck == 2) while (1) {
@@ -641,10 +580,169 @@ export default function (Vue) {
             }
         }
 
-        // position = hsPosition
-        // offset = hsOffset
+        thisVm.$emit('laidout', hsPosition, hs, touching || scrolling ? scrollTime : 0)
+    }
 
-        thisVm.$emit('laidout', hsPosition, hs, scrolling ? scrollTime : -1)
+    let scrolling,
+        scrollingStop,
+        scrollStarted = false,
+        scrollFinishTimeout,
+        scrollTime = -1
+
+    const onResize = () => {
+        for (let h of hs) h.height = 0
+
+        //console.log('resize', clientHeight, _clientHeight(), doc.offsetHeight)
+
+        clientHeight = _clientHeight()
+        scrollTopMax = mmax(0, doc.scrollHeight - clientHeight)
+
+        headerHeight = wrapper.offsetTop
+        container.style.top = -headerHeight + 'px'
+
+        footerHeight = (doc.offsetHeight < _clientHeight()
+            ? doc.offsetHeight : doc.scrollHeight) - headerHeight - thisVm.$el.offsetHeight
+
+        // console.log({
+        //     clientHeight, scrollTopMax, scrollHeight, headerHeight, footerHeight,
+        //     _clientHeight: _clientHeight(),
+        //     _scrollHeight: doc.scrollHeight,
+        //     _offsetHeight: doc.offsetHeight
+        // })
+
+        update()
+    }, onScroll = () => {
+        if (skipScroll) {
+            skipScroll = false
+            return
+        }
+
+        if (!scrolling) {
+            scrolling = true
+
+            console.log('scrollStart', scrollStarted)
+
+            clueRatio = itemCount ? scrollRatio : 0
+            cluePosition = maxPosition * clueRatio
+
+            if (!scrollStarted) {
+                win.addEventListener('mousemove', onScrollContinue)
+                win.addEventListener('wheel', onScrollContinue)
+
+                onScrollContinue()
+            }
+        }
+
+        if (!scrollStarted)
+            scrollTime = Date.now()
+
+        if (scrollFinishTimeout) {
+            clearTimeout(scrollFinishTimeout)
+            scrollFinishTimeout = setTimeout(onScrollFinish, 300)
+        }
+
+        // scrollTop = doc.scrollTop
+        // scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
+
+        //console.log('scroll', scrollTop, scrollTopMax, scrollRatio)
+
+        update()
+    }, onScrollStart = () => {
+        scrollStarted = true
+
+        scrollTime = -1
+    }, onScrollContinue = () => {
+        if (scrollFinishTimeout)
+            clearTimeout(scrollFinishTimeout)
+        scrollFinishTimeout = setTimeout(onScrollFinish, 100)
+    }, onScrollFinish = () => {
+        scrollStarted = false
+
+        if (scrollFinishTimeout) {
+            clearTimeout(scrollFinishTimeout)
+            scrollFinishTimeout = 0
+        }
+
+        if (scrolling) {
+            //console.log('scrollFinish', scrollTop, scrollTopMax, scrollRatio)
+
+            clearScrollEvents()
+
+            update()
+        }
+    }, clearScrollEvents = () => {
+        scrolling = false
+
+        win.removeEventListener('mousemove', onScrollContinue)
+        win.removeEventListener('wheel', onScrollContinue)
+    }
+
+    let touching,
+        touchY, touchDeltaY,
+        touchTime, touchVel
+
+    const onTouchStart = ev => {
+        if (scrollingStop) {
+            scrollingStop()
+            scrollingStop = null
+        }
+
+        doc.style.overflowY = 'hidden'
+        touchY = ev.touches[0].clientY
+
+        touchTime = Date.now()
+        touchVel = []
+
+        //console.log('touch.start', touchY)
+
+        win.addEventListener('touchmove', onTouchMove)
+        if (doc != document.documentElement)
+            window.addEventListener('touchmove', onTouchWindowMove, {passive: false})
+        win.addEventListener('touchend', onTouchEnd)
+
+        touching = true
+    }, onTouchMove = ev => {
+        touchDeltaY = ev.touches[0].clientY - touchY
+
+        if (isWindow && (window.innerHeight != doc.clientHeight) == (touchDeltaY > 0)) {
+            touchY = ev.touches[0].clientY
+
+            touchTime = Date.now()
+            touchVel = []
+        } else {
+            touchY = ev.touches[0].clientY
+            thisVm.scroll(touchDeltaY)
+
+            const time = Date.now()
+            touchVel.push(mabs(touchDeltaY / (time - touchTime)))
+            if (touchVel.length > 5)
+                touchVel.splice(0, touchVel.length - 5)
+            touchTime = time
+        }
+    }, onTouchEnd = ev => {
+        if (touchVel.length > 0) {
+            const vel = mmax(...touchVel)
+            if (vel > 1)
+                thisVm.scroll(touchDeltaY > 0 ? .1 : -.1)
+        }
+
+        clearTouchEvents()
+
+        //console.log('touch.end')
+    }, onTouchWindowMove = ev => {
+        //console.log('touch.window.move')
+
+        if (ev.cancelable)
+            ev.preventDefault()
+    }, clearTouchEvents = () => {
+        touching = false
+
+        doc.style.overflowY = 'auto'
+
+        win.removeEventListener('touchmove', onTouchMove)
+        if (!isWindow)
+            window.removeEventListener('touchmove', onTouchWindowMove)
+        win.removeEventListener('touchend', onTouchEnd)
     }
 
     return {
@@ -723,12 +821,47 @@ export default function (Vue) {
             update: update,
 
             nav(_position, _offset) {
+                if (scrollingStop) {
+                    scrollingStop()
+                    scrollingStop = null
+                }
+
                 position = _position < 0 ? itemCount + _position : _position || 0
                 offset = _offset === undefined ? 0 : _offset
 
                 //console.log('nav', position, offset)
 
                 update()
+            },
+            scroll(delta) {
+                if (scrollingStop) {
+                    scrollingStop()
+                    scrollingStop = null
+                }
+
+                if (mabs(delta) > 1) {
+                    console.log('delta', delta)
+
+                    offset += stackFromBottom ? -delta : delta
+
+                    update()
+                } else if (delta) {
+                    updateNow()
+                    skipScroll = false
+
+                    let scrollDelta = (delta > 0 ? 1 : -1) * mmax(scrollTopMax * mabs(delta), clientHeight)
+                    const baseScrollTop = scrollTop
+                    if (baseScrollTop - scrollDelta < 0)
+                        scrollDelta = baseScrollTop
+                    else if (baseScrollTop - scrollDelta > scrollTopMax)
+                        scrollDelta = baseScrollTop - scrollTopMax
+
+                    console.log('delta', delta, scrollDelta)
+
+                    if (scrollDelta) scrollingStop = animate(process => {
+                        _scroll(baseScrollTop - process * scrollDelta)
+                    }, mmax(500, mmin(2000, 400 * mabs(scrollDelta) / clientHeight)))
+                }
             }
         },
         beforeMount() {
@@ -743,61 +876,49 @@ export default function (Vue) {
             wrapper = this.$el.children[0]
             container = wrapper.children[0]
 
-            scrollWin = thisVm.$el
-            while (scrollWin = scrollWin.parentElement) {
-                const cs = getComputedStyle(scrollWin, null)
-                if (cs.getPropertyValue('overflow-y') != 'visible') break
-            }
+            win = thisVm.$el.closest('.recycler-window')
 
-            if (scrollWin) {
-                scrollDoc = scrollWin
+            if (win) {
+                isWindow = false
+                doc = win
+
+                _clientHeight = () => doc.clientHeight
             } else {
-                scrollWin = window
-                scrollDoc = document.documentElement
+                isWindow = true
+                win = window
+                doc = document.documentElement
+
+                _clientHeight = () => win.innerHeight
             }
 
-            _scroll = top => scrollDoc.scrollTo(scrollDoc.scrollLeft, top)
-
-            onResize()
-
-            // scrollTop = scrollDoc.scrollTop
-            // scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
-
-            let __scrollRatio
-
-            window.addEventListener('wwheel', ev => {
-                event.preventDefault()
-
-                if (!scrolling) {
-                    __scrollRatio = scrollRatio + ev.deltaY * .0005
-                } else {
-                    __scrollRatio = __scrollRatio + ev.deltaY * .0005
-                }
-
-                __scrollRatio = mmax(0, mmin(1, __scrollRatio))
-
-                _scroll(scrollTopMax * __scrollRatio)
-                console.log('__scrollRatio', __scrollRatio, scrollTopMax, scrollTopMax * __scrollRatio)
-
-            }, {passive: false, capture: true})
+            _scroll = top => doc.scrollTo(doc.scrollLeft, top)
 
             window.addEventListener('resize', onResize)
-            scrollWin.addEventListener('scroll', onScroll)
-            scrollWin.addEventListener('mousedown', onScrollStart)
-            scrollWin.addEventListener('mouseup', onScrollFinish)
+            win.addEventListener('scroll', onScroll)
+            win.addEventListener('mousedown', onScrollStart)
+            win.addEventListener('mouseup', onScrollFinish)
 
-            update()
+            win.addEventListener('touchstart', onTouchStart)
+
+            onResize()
         }, beforeDestroy() {
+            if (scrollingStop) {
+                scrollingStop()
+                scrollingStop = null
+            }
+
             window.removeEventListener('resize', onResize)
-            scrollWin.removeEventListener('scroll', onScroll)
-            scrollWin.removeEventListener('mousedown', onScrollStart)
-            scrollWin.removeEventListener('mouseup', onScrollFinish)
 
-            scrollWin.removeEventListener('mousemove', onScrollContinue)
-            scrollWin.removeEventListener('wheel', onScrollContinue)
+            win.removeEventListener('scroll', onScroll)
+            win.removeEventListener('mousedown', onScrollStart)
+            win.removeEventListener('mouseup', onScrollFinish)
 
-            scrolling = false
+            clearScrollEvents()
             onScrollFinish()
+
+            win.removeEventListener('touchstart', onTouchStart)
+
+            clearTouchEvents()
 
             updateCancel()
         }
