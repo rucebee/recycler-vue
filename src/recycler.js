@@ -12,7 +12,10 @@ const mmin = Math.min,
 function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
     const win = vm.$el.closest('.recycler-window') ?? window,
         isWindow = win === window,
+        isFixed = isWindow,
         doc = isWindow ? document.documentElement : win,
+
+        timeStamp = Date.now() <= new Event('check').timeStamp ? Date.now : performance.now.bind(performance),
 
         wrapper = vm.$el.children[0],
         container = wrapper.children[0],
@@ -21,7 +24,11 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         hsBinded = [],
         hsCache = {},
 
-        _scroll = top => doc.scrollTo(doc.scrollLeft, top),
+        _scroll = top => {
+            win.scrollTo(doc.scrollLeft, top)
+            scrollTime = timeStamp()
+            //console.log('_scroll', scrollTime)
+        },
         _clientHeight = isWindow ? () => win.innerHeight : () => doc.clientHeight,
         _bodyHeight = () => {
             const EMPTY_DIV = document.createElement('div'),
@@ -56,9 +63,19 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             return height
         }
 
+    if (isFixed) {
+        container.style.position = 'fixed'
+        container.style.top = 0
+        container.style.left = 0
+        container.style.right = 0
+        container.style.bottom = 0
+    }
+
     win.recycler = vm
 
-    let updateId,
+    let scrollTime = 0,
+
+        updateId,
 
         itemCount = _itemCount(),
         itemBottom = _itemTop(-1),
@@ -81,6 +98,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         scrollHeight = 0,
         headerHeight = 0,
         footerHeight = 0,
+        firstHeight = 0,
         lastHeight = 0
 
     const update = () => {
@@ -164,7 +182,6 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             //console.log('bind', position, h.vm.source)
         }
 
-        h.position = position
         h.top = _itemTop(position)
         if (!position) h.top += headerHeight
 
@@ -186,7 +203,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
     function hsPush(h) {
         if (h.height) {
-            hsBinded[h.position] = h
+            hsBinded[h.vm.position] = h
 
             return
         }
@@ -211,6 +228,9 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
     function hsInvalidate(_position, count) {
         if (hsPosition >= itemCount) {
+            if (!_position)
+                firstHeight = 0
+
             lastHeight = 0
 
             for (let h of hs) h.height = 0
@@ -223,6 +243,9 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         if (_position >= hsPosition && _position <= hsPosition + hs.length
             || hsPosition >= _position && hsPosition <= _position + count) {
 
+            if (!_position)
+                firstHeight = 0
+
             if (_position + count >= itemCount)
                 lastHeight = 0
 
@@ -233,7 +256,16 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         }
 
         if (_position + count >= itemCount && lastHeight) {
+            if (!_position)
+                firstHeight = 0
+
             lastHeight = 0
+
+            return true
+        }
+
+        if (!_position) {
+            firstHeight = 0
 
             return true
         }
@@ -262,7 +294,8 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             scrollHeight = height
 
             wrapper.style.height = (scrollHeight - headerHeight - footerHeight) + 'px'
-            container.style.height = (scrollHeight - footerHeight) + 'px'
+            if (!isFixed)
+                container.style.height = (scrollHeight - footerHeight) + 'px'
 
             // clientHeight = _clientHeight()
             // clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
@@ -277,95 +310,6 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         }
     }
 
-    function _scrollRatio() {
-        // function calc(position, offset, hheight) {
-        //     //hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
-        //     return ((/*<scrollRatio>*/(offset - /*<position>*/position/*</position>*/ * hheight) / (maxOffset - maxPosition * hheight)/*</scrollRatio>*/) * maxOffset - offset) / hheight
-        // }
-
-        if (!maxPosition)
-            return hsOffset / maxOffset
-
-        let startPositionReal = itemCount > hs.length ? hsPosition + (hs.length - 1) * hsPosition / (itemCount - hs.length) : 0,
-            _position = mfloor(startPositionReal),
-            _offset = hsOffset,
-            offsetRatio = 0,
-            hh
-
-        const i = _position - hsPosition
-        for (let j = 0; j < i; j++)
-            _offset += hs[j].height
-
-        // const stat = {
-        //     ratios: [],
-        //     startPosition: _position
-        // }
-
-        hh = hs[i].height
-        offsetRatio = ((/*<scrollRatio>*/(_offset - /*<position>*/position/*</position>*/ * hh) / (maxOffset - maxPosition * hh)/*</scrollRatio>*/) * maxOffset - _offset) / hh
-        // stat.ratios[i] = {
-        //     position: _position,
-        //     offset: _offset,
-        //     hheight: hs[i].height,
-        //     offsetRatio
-        // }
-
-        let j = i
-        if (offsetRatio > 1) {
-            while (++j < hs.length) {
-                _offset += hs[j - 1].height
-
-                hh = hs[j].height
-                let _offsetRatio = ((/*<scrollRatio>*/(_offset - /*<position>*/hsPosition + j/*</position>*/ * hh) / (maxOffset - maxPosition * hh)/*</scrollRatio>*/) * maxOffset - _offset) / hh
-                // stat.ratios[j] = {
-                //     position: hsPosition + j,
-                //     offset: _offset,
-                //     hheight: hs[j].height,
-                //     offsetRatio: _offsetRatio
-                // }
-
-                if (_offsetRatio > -NEAR_ZERO && _offsetRatio < 1) {
-                    offsetRatio = _offsetRatio
-                    _position = hsPosition + j
-                    break
-                }
-            }
-        } else if (offsetRatio < -NEAR_ZERO) {
-            while (--j >= 0) {
-                _offset -= hs[j].height
-
-                hh = hs[j].height
-                let _offsetRatio = ((/*<scrollRatio>*/(_offset - /*<position>*/hsPosition + j/*</position>*/ * hh) / (maxOffset - maxPosition * hh)/*</scrollRatio>*/) * maxOffset - _offset) / hh
-                // stat.ratios[j] = {
-                //     position: hsPosition + j,
-                //     offset: _offset,
-                //     hheight: hs[j].height,
-                //     offsetRatio: _offsetRatio
-                // }
-
-                if (_offsetRatio > -NEAR_ZERO && _offsetRatio < 1) {
-                    offsetRatio = _offsetRatio
-                    _position = hsPosition + j
-                    break
-                }
-            }
-        }
-
-        // for (const index in stat.ratios) {
-        //     const ratio = stat.ratios[index]
-        //     ratio.delta = scrollTopMax * ratio.real / maxPosition - scrollTop
-        // }
-        // stat.info = {
-        //     position: _position,
-        //     startPositionReal,
-        //     offsetRatio,
-        //     range: [hsPosition, hsPosition + hs.length - 1, maxPosition].join(' / ')
-        // }
-        // console.log(stat.info, stat.ratios)
-
-        return mmax(0, mmin(maxPosition, _position + offsetRatio)) / maxPosition
-    }
-
     function updateFrame() {
         itemCount = _itemCount()
         maxPosition = itemCount - 1
@@ -376,15 +320,21 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         if (!itemCount) {
             hsFlush()
 
-            vm.$emit('laidout', 0, hs, scrollEvent || touching)
+            if (!scrolling && !touching && !scrollAnim)
+                vm.$emit('laidout', 0, hs)
 
-            if (scrollEvent && !scrollEvent.target)
-                win.dispatchEvent(scrollEvent)
+            win.dispatchEvent(scrolledEvent = new Event('scroll'))
 
             return
         }
 
         let h, up, down, i
+
+        if (!firstHeight) {
+            h = hsPop(0)
+            firstHeight = h.height
+            hsPush(h)
+        }
 
         if (!lastHeight) {
             h = hsPop(maxPosition)
@@ -394,121 +344,164 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
         maxOffset = clientHeight - lastHeight
 
-        scrollTop = doc.scrollTop
+        scrollTop = win.scrollY
 
-        if (scrollEvent) {
-            scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
+        //console.log({scrolling, touching})
 
-            const positionReal = maxPosition * scrollRatio
 
-            hs.push(h = hsPop(hsPosition = mfloor(positionReal)))
+        if (scrolling) {
+            if (touching) {
+                hsOffset -= scrollTop - touchY
 
-            hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
+                touchY = scrollTop
+
+                console.log({hsOffset})
+
+                hs.push(h = hsPop(hsPosition))
+            } else if (touchY) {
+                touchY = 0
+                scrolling = false
+
+                hs.push(h = hsPop(hsPosition))
+            } else {
+                scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
+
+                //console.log({scrolling, scrollRatio, scrollTop, scrollTopMax})
+
+                const positionReal = maxPosition * scrollRatio
+
+                hs.push(h = hsPop(hsPosition = mfloor(positionReal)))
+
+                hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
+            }
 
             //console.log({hsOffset, hsPosition, hheight: h.height, positionReal, scrollRatio})
             //console.log('scroll', scrollTop, scrollTopMax, scrollRatio, positionReal)
-        } else {
-            if (stackFromBottom) {
-                if (position > maxPosition) {
-                    hsPosition = 0
-                    hs.push(h = hsPop(hsPosition))
+        } else if (stackFromBottom) {
+            if (position > maxPosition) {
+                hsPosition = 0
+                hs.push(h = hsPop(hsPosition))
 
-                    hsOffset = 0
-                } else {
-                    hsPosition = maxPosition - mmax(0, position)
-                    hs.push(h = hsPop(hsPosition))
-
-                    hsOffset = clientHeight - offset - h.height
-
-                    //console.log(hsPosition, hsOffset, '<-', position, _offset)
-                }
+                hsOffset = 0
             } else {
-                if (position > maxPosition) {
-                    hsPosition = maxPosition
-                    hs.push(h = hsPop(hsPosition))
+                hsPosition = maxPosition - mmax(0, position)
+                hs.push(h = hsPop(hsPosition))
 
-                    hsOffset = 0
-                } else {
-                    hsPosition = mmax(0, position)
-                    hs.push(h = hsPop(hsPosition))
+                hsOffset = clientHeight - offset - h.height
 
-                    hsOffset = offset
-                }
+                //console.log(hsPosition, hsOffset, '<-', position, _offset)
+            }
+        } else {
+            if (position > maxPosition) {
+                hsPosition = maxPosition
+                hs.push(h = hsPop(hsPosition))
+
+                hsOffset = 0
+            } else {
+                hsPosition = mmax(0, position)
+                hs.push(h = hsPop(hsPosition))
+
+                hsOffset = offset
             }
         }
 
-        up = scrollTop + hsOffset
+        up = hsOffset
         down = up + h.height
 
         i = hsPosition
-        while (i-- > 0 && up > scrollTop) {
+        while (i-- > 0 && up > 0) {
             hs.unshift(h = hsPop(i))
             up -= h.height
-            hsOffset -= h.height
         }
 
         i = hsPosition
         if (hs.length > 1) hsPosition -= hs.length - 1
 
         hsHeight = down - up
+        hsOffset = up
 
-        while (++i < itemCount && (down < scrollTop + clientHeight || hsHeight < clientHeightEx)) {
+        while (++i < itemCount && (down < clientHeight || hsHeight < clientHeightEx)) {
             hs.push(h = hsPop(i))
             down += h.height
             hsHeight += h.height
         }
 
-        let bottomSpace = scrollTop + clientHeight - down
+        const bottomSpace = clientHeight - down
         if (bottomSpace > 0) {
-            up += bottomSpace
-
             i = hsPosition;
-            while (i-- > 0 && up > scrollTop) {
+            while (i-- > 0 && up > -bottomSpace) {
                 hs.unshift(h = hsPop(i))
                 up -= h.height
-                hsOffset -= h.height
                 hsHeight += h.height
                 hsPosition--
             }
+
+            hsOffset = up
         }
 
         allShown = hs.length == itemCount && hsHeight < clientHeightEx + 1
         if (allShown) {
-            up = 0
-
-            if (!scrollEvent) {
+            if (!scrolling) {
                 calcScrollHeight()
 
-                if (Math.abs(hsOffset - scrollTop) >= 1) {
+                if (Math.abs(scrollTop + hsOffset) >= 1)
                     _scroll(scrollTop = -hsOffset)
-                }
             } else {
                 hsOffset = -mround(scrollTopMax * hsOffset / (clientHeight - hsHeight))
             }
+
+            up = -scrollTop
         } else {
-            hsOffset = up - scrollTop
+            if (bottomSpace > 0) {
+                up += bottomSpace
+                hsOffset = up
+            }
 
             if (hsPosition == 0 && hsOffset > 0) {
                 hsOffset = 0
                 up = 0
 
-                if (!scrollEvent) {
+                if (!scrolling) {
                     calcScrollHeight()
 
                     _scroll(scrollTop = 0)
                     scrollRatio = 0
                 }
-            } else if (!scrollEvent) {
+            } else if (!scrolling) {
                 calcScrollHeight()
 
-                const newScrollTop = scrollTopMax * _scrollRatio()
-                if (Math.abs(newScrollTop - scrollTop) >= 1) {
-                    up += newScrollTop - scrollTop
+                // scrollRatio = scrollTop / scrollTopMax
+                // positionReal = maxPosition * scrollRatio
+                // hsPosition = mfloor(positionReal)
+                //
+                // offsetRatio = positionReal % 1
+                // = maxPosition * scrollTop / scrollTopMax - hsPosition
+                // 0 <= offsetRatio < 1
+                //
+                // hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
+                //
+                // scrollTop = (hsOffset - hsPosition * h.height) / (maxOffset - maxPosition * h.height) * scrollTopMax
 
-                    // console.log('adjustScroll', {
-                    //     delta: newScrollTop - scrollTop,
-                    //     scrollTop
-                    // })
+                let newScrollTop = scrollTop, hOffset = hsOffset
+                //const stat = []
+
+                for (let i = 0; i < hs.length; i++) {
+                    const hh = hs[i].height,
+                        scrollTop = scrollTopMax * (hOffset - (hsPosition + i) * hh) / (maxOffset - maxPosition * hh),
+                        offsetRatio = maxPosition * scrollTop / scrollTopMax - (hsPosition + i)
+
+                    //stat.push({'#': hsPosition + i, scrollTop, offsetRatio})
+
+                    if (offsetRatio > -NEAR_ZERO && offsetRatio < 1) {
+                        newScrollTop = scrollTop
+                        break
+                    }
+
+                    hOffset += hh
+                }
+
+                if (Math.abs(scrollTop - newScrollTop) >= 1) {
+                    console.log('adjustScroll', {scrollTop, newScrollTop})
 
                     _scroll(scrollTop = newScrollTop)
                 }
@@ -518,10 +511,16 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         if (stackFromBottom && scrollHeight < clientHeight)
             up += clientHeight - scrollHeight
 
+        const scrollOffset = isFixed ? 0 : scrollTop
         down = up
 
         let j = 0, fluidCheck = 0
         while (j < hs.length) {
+            if (down > clientHeight) {
+                hsPush(hs.pop())
+                continue
+            }
+
             h = hs[j];
             //h.style.zIndex = j
             //h.style.order = j
@@ -533,26 +532,35 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
                     height -= itemBottom
 
                 if (!allShown) {
-                    if (j == 0 && down + h.top < scrollTop) {
-                        top = down + mmin(height - h.minHeight, scrollTop - down - h.top)
-                        height -= (top) - down
+                    if (j == 0 && down + h.top < 0) {
+                        top = down + mmin(height - h.minHeight, -down - h.top)
+                        height -= top - down
                     }
 
-                    if (j == hs.length - 1 && down + height > scrollTop + clientHeight)
-                        height = mmax(h.minHeight, scrollTop + clientHeight - down)
+                    if (j == hs.length - 1 && down + height > clientHeight)
+                        height = mmax(h.minHeight, clientHeight - down)
                 }
 
-                h.style.top = (top + h.top) + 'px'
+                h.style.top = scrollOffset + top + h.top + 'px'
                 h.style.height = height + 'px'
 
                 fluidCheck = fluidCheck | 2
             } else {
-                h.style.top = down + h.top + 'px'
+                h.style.top = scrollOffset + down + h.top + 'px'
                 fluidCheck = fluidCheck | 1
             }
 
             down += h.height
-            j++
+
+            if (down < 0) {
+                hsPosition++
+                hsOffset += h.height
+
+                hs.splice(j, 1)
+                hsPush(h)
+            } else {
+                j++
+            }
         }
 
         hsFlush()
@@ -617,14 +625,15 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         // position = hsPosition
         // offset = hsOffset
 
-        vm.$emit('laidout', hsPosition, hs, scrollEvent || touching)
+        if (!scrolling && !touching && !scrollAnim)
+            vm.$emit('laidout', hsPosition, hs)
 
-        if (scrollEvent && !scrollEvent.target)
-            win.dispatchEvent(scrollEvent)
+        win.dispatchEvent(scrolledEvent = new Event('scroll'))
     }
 
     let addressBarHeight = 0,
-        scrollEvent = null,
+        scrolling = false,
+        scrolledEvent = null,
         scrollAnim,
         scrollStarted = 0,
         scrollEndTimeout
@@ -643,7 +652,8 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         scrollTopMax = mmax(0, doc.scrollHeight - clientHeight)
 
         headerHeight = wrapper.offsetTop - doc.offsetTop
-        container.style.top = -headerHeight + 'px'
+        if (!isFixed)
+            container.style.top = -headerHeight + 'px'
 
         const bodyHeight = _bodyHeight()
         footerHeight = bodyHeight - headerHeight - vm.$el.offsetHeight
@@ -660,26 +670,25 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
         update()
     }, onScroll = ev => {
-        if (scrollEvent == ev) return
-
-        //console.log('onScroll', ev?.type, scrollStarted)
-
-        if (!scrollStarted) {
-            if (!touching) {
-                //console.log('onScroll cancelBubble')
-
-                ev.cancelBubble = true
-            }
-
+        if (scrolledEvent == ev) {
+            scrolledEvent = null
             return
         }
 
-        scrollEvent = new Event('scroll')
-        //onScrollContinue()
+        //console.log('onScroll', ev.type, ev.timeStamp, scrollStarted)
 
-        update()
+        ev.cancelBubble = true
+
+        if (ev.timeStamp > scrollTime)
+            onScrollContinue(ev)
+
+        if (scrollStarted) {
+            scrolling = true
+
+            update()
+        }
     }, onScrollContinue = ev => {
-        //console.log('onScrollContinue', ev?.type)
+        console.log('onScrollContinue', ev?.type)
 
         if (!scrollStarted)
             scrollStarted = 1
@@ -712,35 +721,42 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             scrollEndTimeout = 0
         }
 
-        if (scrollEvent) {
-            scrollEvent = false
+        if (scrolling) {
+            scrolling = false
 
             update()
         }
     }
 
-    let touching,
+    let touching = false,
         touchY, touchDeltaY,
         touchVelTime, touchVelY, touchVel,
         touchReleaseTimeout,
-        prevOverflow
+        prevOverflow = doc.style.overflowY
 
     const onTouchStart = ev => {
-        //console.log('onTouchStart', ev?.type, allShown)
+        console.log('onTouchStart', ev?.type, allShown)
 
         if (allShown) {
             onScrollContinue(ev)
             return
         }
 
-        onTouchRelease()
-        prevOverflow = doc.style.overflowY
-        doc.style.overflowY = 'hidden'
-
         if (scrollAnim) {
-            scrollAnim.stop()
+            scrollAnim.stop(true)
             scrollAnim = null
         }
+
+        touchY = doc.scrollTop
+        touchDeltaY = 0
+
+        touching = true
+        win.addEventListener('touchend', onTouchEnd)
+
+        return
+
+        onTouchRelease()
+        doc.style.overflowY = 'hidden'
 
         touchY = ev.touches[0].clientY
         touchVelY = touchY
@@ -788,12 +804,20 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         touchVelTime = time
         touchVelY = ev.touches[0].clientY
     }, onTouchEnd = ev => {
-        //console.log('onTouchEnd', ev?.type)
+        console.log('onTouchEnd', ev?.type)
+
+        win.removeEventListener('touchend', onTouchEnd)
+        touching = false
+
+        update()
+
+        return
 
         if (touchVel.length > 0) {
             const vel = mmax(...touchVel)
             if (vel > 1)
-                vm.scrollBy(touchDeltaY > 0 ? .1 : -.1)
+            //vm.scrollBy(touchDeltaY > 0 ? .1 : -.1)
+                vm.scrollBy(touchDeltaY > 0 ? clientHeight : -clientHeight, true)
         }
 
         clearTouchEvents()
@@ -835,6 +859,8 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
     win.addEventListener('touchstart', onTouchStart, true)
 
     onResize()
+    //onScrollContinue()
+    //win.dispatchEvent(new Event('scroll'))
 
     win.recycler = vm
 
@@ -843,7 +869,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             delete win.recycler
 
         if (scrollAnim) {
-            scrollAnim.stop()
+            scrollAnim.stop(true)
             scrollAnim = null
         }
 
@@ -853,8 +879,9 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         win.removeEventListener('wheel', onScrollContinue, true)
         win.removeEventListener('mousewheel', onScrollContinue, true)
         win.removeEventListener('mousedown', onScrollContinue, true)
+        win.removeEventListener('mousemove', onScrollContinue, true)
 
-        scrollEvent = null
+        scrolling = false
         onScrollEnd()
 
         win.removeEventListener('touchstart', onTouchStart, true)
@@ -870,6 +897,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
         for (const key in hsCache) delete hsCache[key]
 
+        firstHeight = 0
         lastHeight = 0
         scrollHeight = 0
     }
@@ -893,8 +921,9 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             if (_position <= position)
                 position += count
 
-            for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
-                hs[i].position += count
+            for (let i = mmax(0, _position - hsPosition); i < hs.length; i++) {
+                hs[i].vm.position += count
+            }
 
             if (hsInvalidate(_position, count)) update()
         },
@@ -907,8 +936,9 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             if (_position < position)
                 position -= mmin(count, position - _position + 1)
 
-            for (let i = mmax(0, _position + count - hsPosition); i < hs.length; i++)
-                hs[i].position -= count
+            for (let i = mmax(0, _position + count - hsPosition); i < hs.length; i++) {
+                hs[i].vm.position -= count
+            }
 
             if (invalid) update()
         },
@@ -920,56 +950,89 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
                 return [position < 0 ? undefined : position, offset]
 
             if (scrollAnim) {
-                scrollAnim.stop()
+                scrollAnim.stop(true)
                 scrollAnim = null
             }
 
             position = _position < 0 ? itemCount + _position : _position ?? 0
-            offset = _offset === undefined ? 0 : _offset
+            offset = _offset === undefined ? (position ? headerHeight : 0) : _offset
 
-            //console.log('position', {position, offset})
+            console.log('position', {position, offset})
 
             update()
         },
 
-        scrollTop: () => hsPosition ? doc.scrollTop : -offset,
+        // positionReal = maxPosition * scrollRatio = 1
+        // maxPosition * scrollTop / scrollTopMax = 1
+        // scrollTop = scrollTopMax / maxPosition
+        scrollTop: () => hsPosition
+            ? firstHeight + (doc.scrollTop - scrollTopMax / maxPosition) / (scrollTopMax - scrollTopMax / maxPosition) * (scrollTopMax - firstHeight)
+            : -offset,
 
-        scrollBy(delta) {
+        scrollBy(delta, smooth) {
+            return
+
             if (scrollAnim) {
-                scrollAnim.stop()
+                scrollAnim.stop(true)
                 scrollAnim = null
             }
 
             if (mabs(delta) > 1) {
                 //console.log('scrollBy', delta)
 
-                offset += stackFromBottom ? -delta : delta
+                delta = stackFromBottom ? -delta : delta
 
-                //console.log('scrollBy', offset)
+                if (smooth) {
+                    let prev = 0
 
-                update()
-            } else if (delta) {
-                updateNow()
-
-                let scrollDelta = (delta > 0 ? 1 : -1) * mmax(scrollTopMax * mabs(delta), clientHeight)
-                const baseScrollTop = doc.scrollTop
-                if (baseScrollTop - scrollDelta < 0)
-                    scrollDelta = baseScrollTop
-                else if (baseScrollTop - scrollDelta > scrollTopMax)
-                    scrollDelta = baseScrollTop - scrollTopMax
-
-                //console.log('scrollBy', delta, baseScrollTop, scrollDelta)
-
-                if (scrollDelta) {
                     scrollAnim = animate(
                         process => {
-                            onScrollContinue()
+                            offset += -prev + (prev = delta * process)
 
-                            _scroll(baseScrollTop - process * scrollDelta)
+                            update()
                         },
-                        mmax(500, mmin(2000, 400 * mabs(scrollDelta) / clientHeight)),
+                        mmax(500, mmin(2000, 250 * mabs(delta) / clientHeight)),
                         t => t * (2 - t)
                     )
+
+                    scrollAnim.then(() => {
+                        scrollAnim = null
+
+                        update()
+                    })
+                } else {
+                    offset += delta
+
+                    update()
+                }
+
+                //console.log('scrollBy', offset)
+            } else if (delta) {
+                updateNow()
+                const scrollTop = doc.scrollTop
+
+                let scrollDelta = (delta > 0 ? 1 : -1) * mmax(scrollTopMax * mabs(delta), clientHeight)
+                if (scrollTop - scrollDelta < 0)
+                    scrollDelta = scrollTop
+                else if (scrollTop - scrollDelta > scrollTopMax)
+                    scrollDelta = scrollTop - scrollTopMax
+
+                //console.log('scrollBy', {delta, scrollTop, scrollDelta})
+
+                if (scrollDelta) {
+                    if (smooth) {
+                        scrollAnim = animate(
+                            process => {
+                                onScrollContinue()
+                                _scroll(scrollTop - process * scrollDelta)
+                            },
+                            mmax(500, mmin(2000, 500 * mabs(scrollDelta) / clientHeight)),
+                            t => t * (2 - t)
+                        )
+                    } else {
+                        onScrollContinue()
+                        _scroll(scrollTop - scrollDelta)
+                    }
                 }
             }
         }
