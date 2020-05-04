@@ -28,6 +28,7 @@ export default function (Vue) {
 
         scrollWin,
         scrollBody,
+        placeholder,
         container,
 
         _scrollHeight,
@@ -299,11 +300,13 @@ export default function (Vue) {
                 )
         ))
 
+        //height = 2 * scrollHeight
+
         if (containerHeight != height) {
             //console.log('containerHeight', containerHeight, height)
             containerHeight = height
 
-            container.style.height = height + 'px'
+            placeholder.style.height = height + 'px'
             scrollTopMax = mmax(0, scrollBody.offsetHeight - scrollHeight)
         }
     }
@@ -318,15 +321,15 @@ export default function (Vue) {
         for (let j = 0; j < i; j++)
             _offset += hs[j].height
 
-        const stats = {
-            ratios: [],
-            startPosition: _position
-        }
+        // const stats = {
+        //     ratios: [],
+        //     startPosition: _position
+        // }
 
         const A = maxOffset / maxPosition
 
         offsetRatio = (A * _position - _offset) / hs[i].height - .5
-        stats.ratios[i] = {position: _position, offsetRatio: offsetRatio}
+        //stats.ratios[i] = {position: _position, offsetRatio: offsetRatio}
 
         let j = i
         if (offsetRatio > 0) {
@@ -334,7 +337,7 @@ export default function (Vue) {
                 _offset += hs[j - 1].height
 
                 let _offsetRatio = (A * (hsPosition + j) - _offset) / hs[j].height - .5
-                stats.ratios[j] = {position: hsPosition + j, offsetRatio: _offsetRatio}
+                //stats.ratios[j] = {position: hsPosition + j, offsetRatio: _offsetRatio}
 
                 if (mabs(_offsetRatio) < mabs(offsetRatio)) {
                     offsetRatio = _offsetRatio
@@ -346,7 +349,7 @@ export default function (Vue) {
                 _offset -= hs[j].height
 
                 let _offsetRatio = (A * (hsPosition + j) - _offset) / hs[j].height - .5
-                stats.ratios[j] = {position: hsPosition + j, offsetRatio: _offsetRatio}
+                //stats.ratios[j] = {position: hsPosition + j, offsetRatio: _offsetRatio}
 
                 if (mabs(_offsetRatio) < mabs(offsetRatio)) {
                     offsetRatio = _offsetRatio
@@ -355,22 +358,17 @@ export default function (Vue) {
             }
         }
 
-        for (const index in stats.ratios) {
-            const ratio = stats.ratios[index]
-            ratio.real = mmax(0, mmin(maxPosition, ratio.position + ratio.offsetRatio + .5))
-            ratio.delta = scrollTopMax * ratio.real / maxPosition - scrollTop
-
-            if (ratio.real == maxPosition) {
-                _position = maxPosition
-                offsetRatio = -.5
-            }
-        }
-        stats.info = {
-            position: _position,
-            offsetRatio: offsetRatio,
-            range: [hsPosition, hsPosition + hs.length - 1, maxPosition].join(' / ')
-        }
-        console.log(stats.info, stats.ratios)
+        // for (const index in stats.ratios) {
+        //     const ratio = stats.ratios[index]
+        //     ratio.real = mmax(0, mmin(maxPosition, ratio.position + ratio.offsetRatio + .5))
+        //     ratio.delta = scrollTopMax * ratio.real / maxPosition - scrollTop
+        // }
+        // stats.info = {
+        //     position: _position,
+        //     offsetRatio: offsetRatio,
+        //     range: [hsPosition, hsPosition + hs.length - 1, maxPosition].join(' / ')
+        // }
+        // console.log(stats.info, stats.ratios)
 
         return mmax(0, mmin(maxPosition, _position + offsetRatio + .5))
     }
@@ -442,19 +440,24 @@ export default function (Vue) {
             }
         }
 
-        up = scrollTop + hsOffset;
+
+        //up = scrollTop + hsOffset;
+        up = hsOffset;
+        container.style.top = scrollTop + 'px'
         down = up + h.height;
 
-        if (up >= scrollTop + scrollHeight) {
-            up = scrollTop + scrollHeight - 1;
+        const scrollTop_zero = 0
+
+        if (up >= scrollTop_zero + scrollHeight) {
+            up = scrollTop_zero + scrollHeight - 1;
             down = up + h.height;
-        } else if (down <= scrollTop) {
-            down = scrollTop + 1;
+        } else if (down <= scrollTop_zero) {
+            down = scrollTop_zero + 1;
             up = down - h.height;
         }
 
         i = hsPosition;
-        while (i-- > 0 && up > scrollTop) {
+        while (i-- > 0 && up > scrollTop_zero) {
             hs.unshift(h = hsPop(i));
             up -= h.height;
         }
@@ -464,19 +467,19 @@ export default function (Vue) {
         if (hs.length > 1)
             hsPosition -= hs.length - 1;
 
-        while (++i < itemCount && down < scrollTop + scrollHeight) {
+        while (++i < itemCount && down < scrollTop_zero + scrollHeight) {
             hs.push(h = hsPop(i));
             down += h.height;
         }
 
         hsHeight = down - up
 
-        let bottomSpace = scrollTop + scrollHeight - down;
+        let bottomSpace = scrollTop_zero + scrollHeight - down;
         if (bottomSpace > 0) {
             up += bottomSpace;
 
             i = hsPosition;
-            while (i-- > 0 && up > scrollTop) {
+            while (i-- > 0 && up > scrollTop_zero) {
                 hs.unshift(h = hsPop(i));
                 up -= h.height;
                 hsHeight += h.height;
@@ -484,7 +487,7 @@ export default function (Vue) {
             }
         }
 
-        hsOffset = up - scrollTop;
+        hsOffset = up - scrollTop_zero;
 
         if (maxPosition == 0 || hsPosition == 0 && hsOffset > 0) {
             hsOffset = 0;
@@ -496,6 +499,7 @@ export default function (Vue) {
                 skipScroll = true;
                 _scroll(scrollTop = 0);
                 scrollRatio = 0;
+                container.style.top = scrollTop + 'px'
             }
         } else if (!scrolling) {
             updateContainer();
@@ -507,10 +511,12 @@ export default function (Vue) {
             if (Math.abs(newScrollTop - scrollTop) >= 1) {
                 up += newScrollTop - scrollTop;
 
-                console.log('adjustPosition', positionReal, newScrollTop - scrollTop);
+                console.log(newScrollTop - scrollTop);
 
                 skipScroll = true;
                 _scroll(scrollTop = newScrollTop);
+
+                container.style.top = scrollTop + 'px'
             }
         }
 
@@ -530,13 +536,13 @@ export default function (Vue) {
                 let top = down,
                     height = h.height;
 
-                if (j == 0 && down < scrollTop) {
-                    top = down + mmin(height - h.minHeight, scrollTop - down);
+                if (j == 0 && down < scrollTop_zero) {
+                    top = down + mmin(height - h.minHeight, scrollTop_zero - down);
                     height -= top - down;
                 }
 
-                if (j == hs.length - 1 && down + height > scrollTop + scrollHeight)
-                    height = mmax(h.minHeight, scrollTop + scrollHeight - down);
+                if (j == hs.length - 1 && down + height > scrollTop_zero + scrollHeight)
+                    height = mmax(h.minHeight, scrollTop_zero + scrollHeight - down);
 
                 h.style.top = (top + h.top) + 'px'
                 h.style.height = height + 'px'
@@ -636,14 +642,16 @@ export default function (Vue) {
         render(h) {
             return h('div', {
                     attrs: {
-                        class: 'recycler-container'
+                        class: 'recycler-container',
+                        style: 'position:relative;'
                     }
-                }, [h('div', {
-                    attrs: {
-                        class: 'recycler',
-                        style: 'position:relative;overflow-y:hidden;'
-                    }
-                })]
+                }, [h('div'),
+                    h('div', {
+                        attrs: {
+                            class: 'recycler',
+                            style: 'position:absolute;overflow:hidden;max-height:1000px;top:0;left:0;right:0;bottom:0;'
+                        }
+                    })]
             )
         },
         methods: {
@@ -705,7 +713,8 @@ export default function (Vue) {
             stackFromBottom = thisVm.stackFromBottom
         },
         mounted() {
-            container = this.$el.children[0]
+            placeholder = this.$el.children[0]
+            container = this.$el.children[1]
 
             scrollWin = container.closest('.recycler-window')
             if (scrollWin) {
