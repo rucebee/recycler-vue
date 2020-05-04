@@ -1,5 +1,5 @@
 import _ from 'lodash'
-import {animate} from 'utils'
+import {animate} from 'robo'
 
 const mmin = Math.min,
     mmax = Math.max,
@@ -9,29 +9,60 @@ const mmin = Math.min,
     NEAR_ZERO = .0001,
     NEAR_ONE = 1 - NEAR_ZERO
 
-export default function (Vue) {
-    const hs = [],
+function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
+    const win = vm.$el.closest('.recycler-window') ?? window,
+        isWindow = win === window,
+        doc = isWindow ? document.documentElement : win,
+
+        wrapper = vm.$el.children[0],
+        container = wrapper.children[0],
+
+        hs = [],
         hsBinded = [],
         hsCache = {},
-        BASE_NODE = document.createElement('div')
 
-    let thisVm,
-        isWindow,
-        updateId,
+        _scroll = top => doc.scrollTo(doc.scrollLeft, top),
+        _clientHeight = isWindow ? () => win.innerHeight : () => doc.clientHeight,
+        _bodyHeight = () => {
+            const EMPTY_DIV = document.createElement('div'),
+                ADD_1PX = vm.$el.offsetHeight ? 0 : 1
 
-        itemCount,
-        itemBottom,
-        maxPosition,
+            EMPTY_DIV.style.height = '1px'
+            if (ADD_1PX) vm.$el.style.minHeight = '1px'
 
-        _itemCount,
-        _itemView,
-        _itemTop,
-        stackFromBottom,
+            let height = 0
+            //let stat
+            for (let i = 0; i < doc.childElementCount; i++) {
+                const c = doc.children[i],
+                    style = c.currentStyle || getComputedStyle(c)
 
-        win,
-        doc,
-        wrapper,
-        container,
+                c.append(EMPTY_DIV)
+
+                const r = c.getBoundingClientRect(),
+                    h = r.bottom - doc.offsetTop + doc.scrollTop + (parseInt(style.marginBottom) || 0) - 1 - ADD_1PX
+
+                if (height < h) {
+                    height = h
+                    //stat = [c, h, r, doc.offsetTop, doc.scrollTop, c.offsetTop, c.offsetHeight]
+                }
+
+                EMPTY_DIV.remove()
+            }
+
+            if (ADD_1PX) vm.$el.style.minHeight = ''
+
+            //console.log(...stat)
+
+            return height
+        }
+
+    win.recycler = vm
+
+    let updateId,
+
+        itemCount = _itemCount(),
+        itemBottom = _itemTop(-1),
+        maxPosition = itemCount - 1,
 
         position = -1,
         offset = 0,
@@ -40,21 +71,17 @@ export default function (Vue) {
         hsHeight = 0,
         maxOffset,
         hsOffset,
+        allShown = true,
 
-        _clientHeight,
         clientHeight,
+        clientHeightEx,
         scrollTop,
         scrollTopMax,
         scrollRatio,
         scrollHeight = 0,
         headerHeight = 0,
         footerHeight = 0,
-        lastHeight = 0,
-
-        clueRatio, cluePosition,
-
-        _scroll,
-        skipScroll = false
+        lastHeight = 0
 
     const update = () => {
             if (updateId)
@@ -84,32 +111,27 @@ export default function (Vue) {
             return h
         }
 
-        let itemView = _itemView(position),
-            hsTypeCache = hsCache[itemView.type]
+        let itemBuilder = _itemBuilder(position),
+            hsTypeCache = hsCache[itemBuilder.type]
 
         if (!hsTypeCache)
-            hsCache[itemView.type] = hsTypeCache = []
+            hsCache[itemBuilder.type] = hsTypeCache = []
 
         h = hsTypeCache.pop()
         if (!h) {
-            const data = itemView.data ? itemView.data() : {}
-            data.position = position
-            data.eventBus = thisVm
+            const itemVm = itemBuilder.build()
+
+            itemVm.position = position
+            itemVm.$mount()
+            itemVm.$emit = (...args) => vm.$emit.apply(vm, args)
+            itemVm._watcher.active = false
 
             h = {
-                vm: new Vue({
-                    el: BASE_NODE.cloneNode(true),
-                    render: h => h(_.assign({}, itemView, {
-                        data: () => data
-                    }))
-                }).$children[0],
-                type: itemView.type
+                vm: itemVm,
+                type: itemBuilder.type,
+                view: itemVm.$el,
+                style: itemVm.$el.style
             }
-
-            h.vm._watcher.active = false
-
-            h.view = h.vm.$el
-            h.style = h.view.style
 
             const style = h.style
             style.position = 'absolute'
@@ -118,22 +140,20 @@ export default function (Vue) {
             style.marginTop = 0
             style.marginBottom = 0
 
-            container.appendChild(h.view)
+            container.append(h.view)
 
-            const cs = getComputedStyle(h.view, null)
-            if (cs.getPropertyValue('max-height').endsWith('%')) {
-                h.maxHeight = (parseInt(cs.getPropertyValue('max-height')) || 0) / 100
-                h.minHeight = (parseInt(cs.getPropertyValue('min-height')) || 0)
+            const computedStyle = h.view.currentStyle || getComputedStyle(h.view)
+            if (computedStyle.maxHeight.endsWith('%')) {
+                h.maxHeight = (parseInt(computedStyle.maxHeight) || 0) / 100
+                h.minHeight = (parseInt(computedStyle.minHeight) || h.view.offsetHeight)
 
                 style.maxHeight = 'initial'
                 style.minHeight = 'initial'
-                if (!h.minHeight)
-                    h.minHeight = h.view.offsetHeight
             }
 
             //console.log('create', position)
         } else {
-            container.appendChild(h.view)
+            container.append(h.view)
 
             //h.style.display = ''
 
@@ -174,7 +194,7 @@ export default function (Vue) {
         let type = h.type,
             hsTypeCache = hsCache[type]
 
-        container.removeChild(h.view)
+        h.view.remove()
         //h.style.display = 'none'
 
         hsTypeCache.push(h)
@@ -190,8 +210,6 @@ export default function (Vue) {
     }
 
     function hsInvalidate(_position, count) {
-        const itemCount = _itemCount()
-
         if (hsPosition >= itemCount) {
             lastHeight = 0
 
@@ -221,7 +239,7 @@ export default function (Vue) {
         }
     }
 
-    function updateScrollHeight() {
+    function calcScrollHeight() {
         let fluidCount = 0,
             fluidHeight = 0
 
@@ -241,85 +259,111 @@ export default function (Vue) {
         ))
 
         if (scrollHeight != height) {
-            //console.log('scrollHeight', scrollHeight, height)
             scrollHeight = height
 
             wrapper.style.height = (scrollHeight - headerHeight - footerHeight) + 'px'
-            clientHeight = _clientHeight()
-            scrollTopMax = mmax(0, scrollHeight - clientHeight)
+            container.style.height = (scrollHeight - footerHeight) + 'px'
+
+            // clientHeight = _clientHeight()
+            // clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
+            scrollTopMax = mmax(0, doc.scrollHeight - clientHeight)
 
             // console.log('scrollHeight', {
-            //     clientHeight, scrollTopMax, scrollHeight,
-            //     _clientHeight: _clientHeight(),
+            //     scrollHeight,
             //     _scrollHeight: doc.scrollHeight,
-            //     _offsetHeight: doc.offsetHeight
+            //     clientHeight,
+            //     scrollTopMax
             // })
         }
     }
 
-    function adjustPosition() {
+    function _scrollRatio() {
+        // function calc(position, offset, hheight) {
+        //     //hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
+        //     return ((/*<scrollRatio>*/(offset - /*<position>*/position/*</position>*/ * hheight) / (maxOffset - maxPosition * hheight)/*</scrollRatio>*/) * maxOffset - offset) / hheight
+        // }
+
+        if (!maxPosition)
+            return hsOffset / maxOffset
+
         let startPositionReal = itemCount > hs.length ? hsPosition + (hs.length - 1) * hsPosition / (itemCount - hs.length) : 0,
             _position = mfloor(startPositionReal),
             _offset = hsOffset,
-            offsetRatio = 0
+            offsetRatio = 0,
+            hh
 
         const i = _position - hsPosition
         for (let j = 0; j < i; j++)
             _offset += hs[j].height
 
-        // const stats = {
+        // const stat = {
         //     ratios: [],
         //     startPosition: _position
         // }
 
-        const A = maxOffset / maxPosition
+        hh = hs[i].height
+        offsetRatio = ((/*<scrollRatio>*/(_offset - /*<position>*/position/*</position>*/ * hh) / (maxOffset - maxPosition * hh)/*</scrollRatio>*/) * maxOffset - _offset) / hh
+        // stat.ratios[i] = {
+        //     position: _position,
+        //     offset: _offset,
+        //     hheight: hs[i].height,
+        //     offsetRatio
+        // }
 
-        offsetRatio = (A * _position - _offset) / hs[i].height - .5
-        //stats.ratios[i] = {position: _position, offsetRatio: offsetRatio}
+        let j = i
+        if (offsetRatio > 1) {
+            while (++j < hs.length) {
+                _offset += hs[j - 1].height
 
-        if (_position != maxPosition || offsetRatio <= -.5 - NEAR_ZERO) {
-            let j = i
+                hh = hs[j].height
+                let _offsetRatio = ((/*<scrollRatio>*/(_offset - /*<position>*/hsPosition + j/*</position>*/ * hh) / (maxOffset - maxPosition * hh)/*</scrollRatio>*/) * maxOffset - _offset) / hh
+                // stat.ratios[j] = {
+                //     position: hsPosition + j,
+                //     offset: _offset,
+                //     hheight: hs[j].height,
+                //     offsetRatio: _offsetRatio
+                // }
 
-            if (offsetRatio > 0) {
-                while (++j < hs.length) {
-                    _offset += hs[j - 1].height
-
-                    let _offsetRatio = (A * (hsPosition + j) - _offset) / hs[j].height - .5
-                    //stats.ratios[j] = {position: hsPosition + j, offsetRatio: _offsetRatio}
-
-                    if (mabs(_offsetRatio) < mabs(offsetRatio)) {
-                        offsetRatio = _offsetRatio
-                        _position = hsPosition + j
-                    }//else break //Do not break
+                if (_offsetRatio > -NEAR_ZERO && _offsetRatio < 1) {
+                    offsetRatio = _offsetRatio
+                    _position = hsPosition + j
+                    break
                 }
-            } else {
-                while (--j >= 0) {
-                    _offset -= hs[j].height
+            }
+        } else if (offsetRatio < -NEAR_ZERO) {
+            while (--j >= 0) {
+                _offset -= hs[j].height
 
-                    let _offsetRatio = (A * (hsPosition + j) - _offset) / hs[j].height - .5
-                    //stats.ratios[j] = {position: hsPosition + j, offsetRatio: _offsetRatio}
+                hh = hs[j].height
+                let _offsetRatio = ((/*<scrollRatio>*/(_offset - /*<position>*/hsPosition + j/*</position>*/ * hh) / (maxOffset - maxPosition * hh)/*</scrollRatio>*/) * maxOffset - _offset) / hh
+                // stat.ratios[j] = {
+                //     position: hsPosition + j,
+                //     offset: _offset,
+                //     hheight: hs[j].height,
+                //     offsetRatio: _offsetRatio
+                // }
 
-                    if (mabs(_offsetRatio) < mabs(offsetRatio)) {
-                        offsetRatio = _offsetRatio
-                        _position = hsPosition + j
-                    }//else break //Do not break
+                if (_offsetRatio > -NEAR_ZERO && _offsetRatio < 1) {
+                    offsetRatio = _offsetRatio
+                    _position = hsPosition + j
+                    break
                 }
             }
         }
 
-        // for (const index in stats.ratios) {
-        //     const ratio = stats.ratios[index]
-        //     ratio.real = mmax(0, mmin(maxPosition, ratio.position + ratio.offsetRatio + .5))
+        // for (const index in stat.ratios) {
+        //     const ratio = stat.ratios[index]
         //     ratio.delta = scrollTopMax * ratio.real / maxPosition - scrollTop
         // }
-        // stats.info = {
+        // stat.info = {
         //     position: _position,
-        //     offsetRatio: offsetRatio,
+        //     startPositionReal,
+        //     offsetRatio,
         //     range: [hsPosition, hsPosition + hs.length - 1, maxPosition].join(' / ')
         // }
-        // console.log(stats.info, stats.ratios)
+        // console.log(stat.info, stat.ratios)
 
-        return mmax(0, mmin(maxPosition, _position + offsetRatio + .5))
+        return mmax(0, mmin(maxPosition, _position + offsetRatio)) / maxPosition
     }
 
     function updateFrame() {
@@ -332,7 +376,10 @@ export default function (Vue) {
         if (!itemCount) {
             hsFlush()
 
-            thisVm.$emit('laidout', 0, hs, scrolling || touching)
+            vm.$emit('laidout', 0, hs, scrollEvent || touching)
+
+            if (scrollEvent && !scrollEvent.target)
+                win.dispatchEvent(scrollEvent)
 
             return
         }
@@ -347,24 +394,18 @@ export default function (Vue) {
 
         maxOffset = clientHeight - lastHeight
 
-        if (scrolling) {
-            scrollTop = doc.scrollTop
+        scrollTop = doc.scrollTop
+
+        if (scrollEvent) {
             scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
 
-            const positionReal = scrollStarted ? (
-                mmin(maxPosition, scrollRatio < clueRatio ?
-                    (clueRatio < NEAR_ZERO ? 0 : cluePosition * scrollRatio / clueRatio) :
-                    maxPosition - (clueRatio > NEAR_ONE ? 0 : (maxPosition - cluePosition) * (1 - scrollRatio) / (1 - clueRatio))
-                )
-            ) : maxPosition * scrollRatio
+            const positionReal = maxPosition * scrollRatio
 
             hs.push(h = hsPop(hsPosition = mfloor(positionReal)))
 
             hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
 
-            clueRatio = scrollRatio;
-            cluePosition = positionReal
-
+            //console.log({hsOffset, hsPosition, hheight: h.height, positionReal, scrollRatio})
             //console.log('scroll', scrollTop, scrollTopMax, scrollRatio, positionReal)
         } else {
             if (stackFromBottom) {
@@ -379,7 +420,7 @@ export default function (Vue) {
 
                     hsOffset = clientHeight - offset - h.height
 
-                    //console.log(hsPosition, hsOffset, '<-', position, offset)
+                    //console.log(hsPosition, hsOffset, '<-', position, _offset)
                 }
             } else {
                 if (position > maxPosition) {
@@ -403,19 +444,19 @@ export default function (Vue) {
         while (i-- > 0 && up > scrollTop) {
             hs.unshift(h = hsPop(i))
             up -= h.height
+            hsOffset -= h.height
         }
 
         i = hsPosition
-
-        if (hs.length > 1)
-            hsPosition -= hs.length - 1
-
-        while (++i < itemCount && down < scrollTop + clientHeight) {
-            hs.push(h = hsPop(i))
-            down += h.height
-        }
+        if (hs.length > 1) hsPosition -= hs.length - 1
 
         hsHeight = down - up
+
+        while (++i < itemCount && (down < scrollTop + clientHeight || hsHeight < clientHeightEx)) {
+            hs.push(h = hsPop(i))
+            down += h.height
+            hsHeight += h.height
+        }
 
         let bottomSpace = scrollTop + clientHeight - down
         if (bottomSpace > 0) {
@@ -425,37 +466,52 @@ export default function (Vue) {
             while (i-- > 0 && up > scrollTop) {
                 hs.unshift(h = hsPop(i))
                 up -= h.height
+                hsOffset -= h.height
                 hsHeight += h.height
                 hsPosition--
             }
         }
 
-        hsOffset = up - scrollTop
-
-        if (maxPosition == 0 || hsPosition == 0 && hsOffset > 0) {
-            hsOffset = 0
+        allShown = hs.length == itemCount && hsHeight < clientHeightEx + 1
+        if (allShown) {
             up = 0
 
-            if (!scrolling) {
-                updateScrollHeight()
+            if (!scrollEvent) {
+                calcScrollHeight()
 
-                skipScroll = true
-                _scroll(scrollTop = 0)
-                scrollRatio = 0
+                if (Math.abs(hsOffset - scrollTop) >= 1) {
+                    _scroll(scrollTop = -hsOffset)
+                }
+            } else {
+                hsOffset = -mround(scrollTopMax * hsOffset / (clientHeight - hsHeight))
             }
-        } else if (!scrolling) {
-            updateScrollHeight()
+        } else {
+            hsOffset = up - scrollTop
 
-            const positionReal = adjustPosition(),
-                newScrollTop = scrollTopMax * positionReal / maxPosition
+            if (hsPosition == 0 && hsOffset > 0) {
+                hsOffset = 0
+                up = 0
 
-            if (Math.abs(newScrollTop - scrollTop) >= 1) {
-                up += newScrollTop - scrollTop
+                if (!scrollEvent) {
+                    calcScrollHeight()
 
-                //console.log('adjustPosition', positionReal, newScrollTop - scrollTop)
+                    _scroll(scrollTop = 0)
+                    scrollRatio = 0
+                }
+            } else if (!scrollEvent) {
+                calcScrollHeight()
 
-                skipScroll = true
-                _scroll(scrollTop = newScrollTop)
+                const newScrollTop = scrollTopMax * _scrollRatio()
+                if (Math.abs(newScrollTop - scrollTop) >= 1) {
+                    up += newScrollTop - scrollTop
+
+                    // console.log('adjustScroll', {
+                    //     delta: newScrollTop - scrollTop,
+                    //     scrollTop
+                    // })
+
+                    _scroll(scrollTop = newScrollTop)
+                }
             }
         }
 
@@ -476,13 +532,15 @@ export default function (Vue) {
                 if (hsPosition + j == maxPosition)
                     height -= itemBottom
 
-                if (j == 0 && down < scrollTop) {
-                    top = down + mmin(height - h.minHeight, scrollTop - down)
-                    height -= top - down
-                }
+                if (!allShown) {
+                    if (j == 0 && down + h.top < scrollTop) {
+                        top = down + mmin(height - h.minHeight, scrollTop - down - h.top)
+                        height -= (top) - down
+                    }
 
-                if (j == hs.length - 1 && down + height > scrollTop + clientHeight)
-                    height = mmax(h.minHeight, scrollTop + clientHeight - down)
+                    if (j == hs.length - 1 && down + height > scrollTop + clientHeight)
+                        height = mmax(h.minHeight, scrollTop + clientHeight - down)
+                }
 
                 h.style.top = (top + h.top) + 'px'
                 h.style.height = height + 'px'
@@ -521,7 +579,7 @@ export default function (Vue) {
                     if (!h.maxHeight) break
                 } else {
                     position = -1
-                    offset = 0
+                    //offset = 0
                     break
                 }
             }
@@ -548,122 +606,153 @@ export default function (Vue) {
 
                     if (!h.maxHeight) break
                 } else {
-                    offset = 0
+                    //offset = 0
                     break
                 }
             }
         }
 
-        thisVm.$emit('laidout', hsPosition, hs, scrolling || touching)
+        //console.log({hsPosition, hsOffset, position, offset, hsHeight})
+
+        // position = hsPosition
+        // offset = hsOffset
+
+        vm.$emit('laidout', hsPosition, hs, scrollEvent || touching)
+
+        if (scrollEvent && !scrollEvent.target)
+            win.dispatchEvent(scrollEvent)
     }
 
-    let scrolling,
-        scrollingAnim,
-        scrollStarted = false,
+    let addressBarHeight = 0,
+        scrollEvent = null,
+        scrollAnim,
+        scrollStarted = 0,
         scrollEndTimeout
 
     const onResize = () => {
+        if (isWindow) {
+            const _addressBarHeight = innerHeight - doc.clientHeight
+            if (_addressBarHeight)
+                addressBarHeight = _addressBarHeight
+        }
+
         hsInvalidate(0, itemCount)
 
         clientHeight = _clientHeight()
+        clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
         scrollTopMax = mmax(0, doc.scrollHeight - clientHeight)
 
-        headerHeight = wrapper.offsetTop
+        headerHeight = wrapper.offsetTop - doc.offsetTop
         container.style.top = -headerHeight + 'px'
 
-        footerHeight = (doc.offsetHeight < _clientHeight()
-            ? doc.offsetHeight : doc.scrollHeight) - headerHeight - thisVm.$el.offsetHeight
+        const bodyHeight = _bodyHeight()
+        footerHeight = bodyHeight - headerHeight - vm.$el.offsetHeight
 
         // console.log('resize', {
-        //     clientHeight, scrollTopMax, scrollHeight, headerHeight, footerHeight,
-        //     _clientHeight: _clientHeight(),
-        //     _scrollHeight: doc.scrollHeight,
-        //     _offsetHeight: doc.offsetHeight
+        //     clientHeight,
+        //     clientHeightEx,
+        //     scrollTopMax,
+        //     headerHeight,
+        //     bodyHeight,
+        //     elHeight: vm.$el.offsetHeight,
+        //     footerHeight
         // })
 
         update()
-    }, onScroll = () => {
-        if (skipScroll) {
-            skipScroll = false
+    }, onScroll = ev => {
+        if (scrollEvent == ev) return
+
+        //console.log('onScroll', ev?.type, scrollStarted)
+
+        if (!scrollStarted) {
+            if (!touching) {
+                //console.log('onScroll cancelBubble')
+
+                ev.cancelBubble = true
+            }
+
             return
         }
 
-        if (!scrolling) {
-            scrolling = true
-
-            //console.log('scrollStart', scrollStarted)
-
-            clueRatio = itemCount ? scrollRatio : 0
-            cluePosition = maxPosition * clueRatio
-
-            if (!scrollStarted) {
-                win.addEventListener('mousemove', onScrollContinue)
-                win.addEventListener('wheel', onScrollContinue)
-
-                onScrollContinue()
-            }
-        }
-
-        if (scrollEndTimeout) {
-            clearTimeout(scrollEndTimeout)
-            scrollEndTimeout = setTimeout(onScrollEnd, 300)
-        }
-
-        // scrollTop = doc.scrollTop
-        // scrollRatio = mmax(0, mmin(1, scrollTopMax > 0 ? scrollTop / scrollTopMax : 0))
-
-        //console.log('scroll', scrollTop, scrollTopMax, scrollRatio)
+        scrollEvent = new Event('scroll')
+        //onScrollContinue()
 
         update()
-    }, onScrollStart = () => {
-        scrollStarted = true
-    }, onScrollContinue = () => {
+    }, onScrollContinue = ev => {
+        //console.log('onScrollContinue', ev?.type)
+
+        if (!scrollStarted)
+            scrollStarted = 1
+
+        if (scrollStarted > 0 && ev && (ev.type == 'mousedown' || ev.type == 'touchstart')) {
+            scrollStarted = -1
+
+            //win.addEventListener('mousemove', onScrollContinue)
+            addEventListener('mouseup', onScrollEnd)
+            addEventListener('touchend', onScrollEnd)
+        }
+
         if (scrollEndTimeout)
             clearTimeout(scrollEndTimeout)
-        scrollEndTimeout = setTimeout(onScrollEnd, 100)
-    }, onScrollEnd = () => {
-        scrollStarted = false
+        if (scrollStarted > 0)
+            scrollEndTimeout = setTimeout(onScrollEnd, 200)
+    }, onScrollEnd = ev => {
+        //console.log('onScrollEnd', ev?.type)
+
+        if (scrollStarted < 0) {
+            removeEventListener('mouseup', onScrollEnd)
+            removeEventListener('touchend', onScrollEnd)
+            //win.removeEventListener('mousemove', onScrollContinue)
+        }
+
+        scrollStarted = 0
 
         if (scrollEndTimeout) {
             clearTimeout(scrollEndTimeout)
             scrollEndTimeout = 0
         }
 
-        if (scrolling) {
-            //console.log('scrollFinish', scrollTop, scrollTopMax, scrollRatio)
-
-            clearScrollEvents()
+        if (scrollEvent) {
+            scrollEvent = false
 
             update()
         }
-    }, clearScrollEvents = () => {
-        scrolling = false
-
-        win.removeEventListener('mousemove', onScrollContinue)
-        win.removeEventListener('wheel', onScrollContinue)
     }
 
     let touching,
         touchY, touchDeltaY,
-        touchTime, touchVel
+        touchVelTime, touchVelY, touchVel,
+        touchReleaseTimeout,
+        prevOverflow
 
     const onTouchStart = ev => {
-        if (scrollingAnim) {
-            scrollingAnim.stop()
-            scrollingAnim = null
+        //console.log('onTouchStart', ev?.type, allShown)
+
+        if (allShown) {
+            onScrollContinue(ev)
+            return
         }
 
+        onTouchRelease()
+        prevOverflow = doc.style.overflowY
         doc.style.overflowY = 'hidden'
-        touchY = ev.touches[0].clientY
 
-        touchTime = Date.now()
+        if (scrollAnim) {
+            scrollAnim.stop()
+            scrollAnim = null
+        }
+
+        touchY = ev.touches[0].clientY
+        touchVelY = touchY
+
+        touchVelTime = Date.now()
         touchVel = []
 
         //console.log('touch.start', touchY)
 
-        win.addEventListener('touchmove', onTouchMove)
+        win.addEventListener('touchmove', onTouchMove, true)
         if (!isWindow)
-            addEventListener('touchmove', onTouchWindowMove, {passive: false})
+            win.addEventListener('touchmove', onTouchGlobalMove, {capture: true, passive: false})
         win.addEventListener('touchend', onTouchEnd)
 
         touching = true
@@ -671,247 +760,280 @@ export default function (Vue) {
         touchDeltaY = ev.touches[0].clientY - touchY
 
         if (isWindow && (innerHeight != doc.clientHeight) == (touchDeltaY > 0)) {
-            touchY = ev.touches[0].clientY
+            if (addressBarHeight) {
+                let _touchDeltaY = 0
 
-            touchTime = Date.now()
-            touchVel = []
+                if (touchDeltaY > addressBarHeight + 1) {
+                    _touchDeltaY = touchDeltaY - addressBarHeight
+                } else if (-touchDeltaY > addressBarHeight + 1) {
+                    _touchDeltaY = touchDeltaY + addressBarHeight
+                }
+
+                if (_touchDeltaY) {
+                    //console.log({addressBarHeight, touchDeltaY, _touchDeltaY})
+
+                    touchY += _touchDeltaY
+                    vm.scrollBy(_touchDeltaY)
+                }
+            }
         } else if (mabs(touchDeltaY) > 1) {
             touchY = ev.touches[0].clientY
-            thisVm.scroll(touchDeltaY)
-
-            const time = Date.now()
-            touchVel.push(mabs(touchDeltaY / (time - touchTime)))
-            if (touchVel.length > 5)
-                touchVel.splice(0, touchVel.length - 5)
-            touchTime = time
+            vm.scrollBy(touchDeltaY)
         }
+
+        const time = Date.now()
+        touchVel.push(mabs((ev.touches[0].clientY - touchVelY) / (time - touchVelTime)))
+        if (touchVel.length > 5)
+            touchVel.splice(0, touchVel.length - 5)
+        touchVelTime = time
+        touchVelY = ev.touches[0].clientY
     }, onTouchEnd = ev => {
+        //console.log('onTouchEnd', ev?.type)
+
         if (touchVel.length > 0) {
             const vel = mmax(...touchVel)
             if (vel > 1)
-                thisVm.scroll(touchDeltaY > 0 ? .1 : -.1)
+                vm.scrollBy(touchDeltaY > 0 ? .1 : -.1)
         }
 
         clearTouchEvents()
+        touchReleaseTimeout = setTimeout(onTouchRelease, 1000)
 
-        //console.log('touch.end')
+        update()
     }, onTouchGlobalMove = ev => {
-        //console.log('touch.global.move')
+        //console.log('onTouchGlobalMove')
 
         if (ev.cancelable)
             ev.preventDefault()
+    }, onTouchRelease = () => {
+        if (touchReleaseTimeout) {
+            clearTimeout(touchReleaseTimeout)
+            touchReleaseTimeout = 0
+
+            doc.style.overflowY = prevOverflow
+        }
     }, clearTouchEvents = () => {
         touching = false
 
-        //doc.style.overflowY = 'auto'
-
-        win.removeEventListener('touchmove', onTouchMove)
+        win.removeEventListener('touchmove', onTouchMove, true)
         if (!isWindow)
-            removeEventListener('touchmove', onTouchGlobalMove)
+            win.removeEventListener('touchmove', onTouchGlobalMove, false)
         win.removeEventListener('touchend', onTouchEnd)
+
+        if (touchReleaseTimeout) {
+            clearTimeout(touchReleaseTimeout)
+            touchReleaseTimeout = 0
+        }
     }
 
-    return {
-        name: 'Recycler',
+    addEventListener('resize', onResize)
+    win.addEventListener('scroll', onScroll, true)
+    win.addEventListener('wheel', onScrollContinue, true)
+    win.addEventListener('mousewheel', onScrollContinue, true)
+    win.addEventListener('mousedown', onScrollContinue, true)
 
-        props: {
-            itemCount: {
-                type: Function,
-                required: true
-            },
-            itemView: {
-                type: Function,
-                required: true
-            },
-            stackFromBottom: Boolean,
-            itemTop: {
-                type: Function,
-                default: () => 0
+    win.addEventListener('touchstart', onTouchStart, true)
+
+    onResize()
+
+    win.recycler = vm
+
+    this.destroy = () => {
+        if (win.recycler === vm)
+            delete win.recycler
+
+        if (scrollAnim) {
+            scrollAnim.stop()
+            scrollAnim = null
+        }
+
+        removeEventListener('resize', onResize)
+
+        win.removeEventListener('scroll', onScroll, true)
+        win.removeEventListener('wheel', onScrollContinue, true)
+        win.removeEventListener('mousewheel', onScrollContinue, true)
+        win.removeEventListener('mousedown', onScrollContinue, true)
+
+        scrollEvent = null
+        onScrollEnd()
+
+        win.removeEventListener('touchstart', onTouchStart, true)
+
+        onTouchRelease()
+        clearTouchEvents()
+
+        updateCancel()
+
+        for (const h of hs) hsPush(h)
+        hs.length = 0
+        hsBinded.length = 0
+
+        for (const key in hsCache) delete hsCache[key]
+
+        lastHeight = 0
+        scrollHeight = 0
+    }
+
+    _.assign(vm, {
+        onDatasetChanged() {
+            //console.log('update', hsPosition, position, _position, count)
+
+            if (hsInvalidate(0, _itemCount())) update()
+        },
+
+        onUpdate(_position, count) {
+            //console.log('update', hsPosition, position, _position, count)
+
+            if (hsInvalidate(_position, count)) update()
+        },
+
+        onInsert(_position, count) {
+            //console.log('insert', hsPosition, position, _position, count)
+
+            if (_position <= position)
+                position += count
+
+            for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
+                hs[i].position += count
+
+            if (hsInvalidate(_position, count)) update()
+        },
+
+        onRemove(_position, count) {
+            //console.log('remove', hsPosition, position, _position, count)
+
+            const invalid = hsInvalidate(_position, count)
+
+            if (_position < position)
+                position -= mmin(count, position - _position + 1)
+
+            for (let i = mmax(0, _position + count - hsPosition); i < hs.length; i++)
+                hs[i].position -= count
+
+            if (invalid) update()
+        },
+
+        update: update,
+
+        position(_position, _offset) {
+            if (_position === undefined && _offset === undefined)
+                return [position < 0 ? undefined : position, offset]
+
+            if (scrollAnim) {
+                scrollAnim.stop()
+                scrollAnim = null
             }
+
+            position = _position < 0 ? itemCount + _position : _position ?? 0
+            offset = _offset === undefined ? 0 : _offset
+
+            //console.log('position', {position, offset})
+
+            update()
         },
 
-        render(h) {
-            return h('div', {
-                    attrs: {
-                        class: 'recycler'
-                    }
-                }, [h('div', {
-                    attrs: {
-                        style: 'position:relative;overflow:hidden;'
-                    }
-                }, [h('div', {
-                    attrs: {
-                        class: 'recycler-items',
-                        style: 'position:relative;'
-                    }
-                })])]
-            )
-        },
+        scrollTop: () => hsPosition ? doc.scrollTop : -offset,
 
-        methods: {
-            onDatasetChanged() {
-                //console.log('update', hsPosition, position, _position, count)
+        scrollBy(delta) {
+            if (scrollAnim) {
+                scrollAnim.stop()
+                scrollAnim = null
+            }
 
-                if (hsInvalidate(0, _itemCount())) update()
-            },
+            if (mabs(delta) > 1) {
+                //console.log('scrollBy', delta)
 
-            onUpdate(_position, count) {
-                //console.log('update', hsPosition, position, _position, count)
+                offset += stackFromBottom ? -delta : delta
 
-                if (hsInvalidate(_position, count)) update()
-            },
-
-            onInsert(_position, count) {
-                //console.log('insert', hsPosition, position, _position, count)
-
-                if (_position <= position)
-                    position += count
-
-                for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
-                    hs[i].position += count
-
-                if (hsInvalidate(_position, count)) update()
-            },
-
-            onRemove(_position, count) {
-                //console.log('remove', hsPosition, position, _position, count)
-
-                const invalid = hsInvalidate(_position, count)
-
-                if (_position < position)
-                    position -= mmin(count, position - _position + 1)
-
-                for (let i = mmax(0, _position + count - hsPosition); i < hs.length; i++)
-                    hs[i].position -= count
-
-                if (invalid) update()
-            },
-
-            update: update,
-
-            nav(_position, _offset) {
-                if (scrollingAnim) {
-                    scrollingAnim.stop()
-                    scrollingAnim = null
-                }
-
-                position = _position < 0 ? itemCount + _position : _position || 0
-                offset = _offset === undefined ? 0 : _offset
-
-                //console.log('nav', position, offset)
+                //console.log('scrollBy', offset)
 
                 update()
-            },
+            } else if (delta) {
+                updateNow()
 
-            scrollTop: () => !hsPosition ? -hsOffset : scrollTop,
+                let scrollDelta = (delta > 0 ? 1 : -1) * mmax(scrollTopMax * mabs(delta), clientHeight)
+                const baseScrollTop = doc.scrollTop
+                if (baseScrollTop - scrollDelta < 0)
+                    scrollDelta = baseScrollTop
+                else if (baseScrollTop - scrollDelta > scrollTopMax)
+                    scrollDelta = baseScrollTop - scrollTopMax
 
-            scroll(delta) {
-                if (scrollingAnim) {
-                    scrollingAnim.stop()
-                    scrollingAnim = null
-                }
+                //console.log('scrollBy', delta, baseScrollTop, scrollDelta)
 
-                if (mabs(delta) > 1) {
-                    //console.log('delta', delta)
+                if (scrollDelta) {
+                    scrollAnim = animate(
+                        process => {
+                            onScrollContinue()
 
-                    offset += stackFromBottom ? -delta : delta
-
-                    update()
-                } else if (delta) {
-                    updateNow()
-                    skipScroll = false
-
-                    let scrollDelta = (delta > 0 ? 1 : -1) * mmax(scrollTopMax * mabs(delta), clientHeight)
-                    const baseScrollTop = scrollTop
-                    if (baseScrollTop - scrollDelta < 0)
-                        scrollDelta = baseScrollTop
-                    else if (baseScrollTop - scrollDelta > scrollTopMax)
-                        scrollDelta = baseScrollTop - scrollTopMax
-
-                    //console.log('delta', delta, baseScrollTop, scrollDelta)
-
-                    if (scrollDelta) scrollingAnim = animate(process => {
-                        _scroll(baseScrollTop - process * scrollDelta)
-                    }, mmax(500, mmin(2000, 400 * mabs(scrollDelta) / clientHeight)))
+                            _scroll(baseScrollTop - process * scrollDelta)
+                        },
+                        mmax(500, mmin(2000, 400 * mabs(scrollDelta) / clientHeight)),
+                        t => t * (2 - t)
+                    )
                 }
             }
-        },
-
-        beforeMount() {
-            thisVm = this
-
-            _itemCount = thisVm.itemCount
-            _itemView = thisVm.itemView
-            _itemTop = thisVm.itemTop
-            stackFromBottom = thisVm.stackFromBottom
-        },
-
-        mounted() {
-            wrapper = this.$el.children[0]
-            container = wrapper.children[0]
-
-            win = thisVm.$el.closest('.recycler-window')
-
-            if (win) {
-                isWindow = false
-                doc = win
-
-                _clientHeight = () => doc.clientHeight
-            } else {
-                isWindow = true
-                win = window
-                doc = document.documentElement
-
-                _clientHeight = () => win.innerHeight
-            }
-
-            _scroll = top => doc.scrollTo(doc.scrollLeft, top)
-
-            addEventListener('resize', onResize)
-            win.addEventListener('scroll', onScroll)
-            win.addEventListener('mousedown', onScrollStart)
-            win.addEventListener('mouseup', onScrollEnd)
-
-            win.addEventListener('touchstart', onTouchStart)
-
-            scrollTop = doc.scrollTop
-            onResize()
-
-            win.recycler = thisVm
-        },
-
-        beforeDestroy() {
-            if (win.recycler === thisVm)
-                delete win.recycler
-
-            if (scrollingAnim) {
-                scrollingAnim.stop()
-                scrollingAnim = null
-            }
-
-            removeEventListener('resize', onResize)
-
-            win.removeEventListener('scroll', onScroll)
-            win.removeEventListener('mousedown', onScrollStart)
-            win.removeEventListener('mouseup', onScrollEnd)
-
-            clearScrollEvents()
-            onScrollEnd()
-
-            win.removeEventListener('touchstart', onTouchStart)
-
-            clearTouchEvents()
-
-            updateCancel()
-
-            for (const h of hs) hsPush(h)
-            hs.length = 0
-            hsBinded.length = 0
-
-            for (const key in hsCache) delete hsCache[key]
-
-            lastHeight = 0
-            scrollHeight = 0
         }
+    })
+}
+
+export default {
+    name: 'Recycler',
+
+    Builder(Vue, component, propsData) {
+        const Component = Vue.extend(component),
+            data = component.data?.() ?? {},
+            dataFn = () => _.assign({position: undefined}, data)
+
+        this.type = component.name
+        this.build = () => new Component({
+            data: dataFn,
+            propsData: propsData
+        })
+    },
+
+    data() {
+        return {}
+    },
+
+    props: {
+        itemCount: {
+            type: Function,
+            required: true
+        },
+        itemBuilder: {
+            type: Function,
+            required: true
+        },
+        stackFromBottom: Boolean,
+        itemTop: {
+            type: Function,
+            default: () => 0
+        }
+    },
+
+    render(h) {
+        return h('div', {
+                attrs: {
+                    class: 'recycler'
+                }
+            }, [h('div', {
+                attrs: {
+                    style: 'position:relative;'
+                }
+            }, [h('div', {
+                attrs: {
+                    class: 'recycler-items',
+                    style: 'position:relative;overflow:hidden;'
+                }
+            })])]
+        )
+    },
+
+    mounted() {
+        this._instance = new Instance(this, this.itemCount, this.itemBuilder, this.itemTop, this.stackFromBottom)
+    },
+
+    beforeDestroy() {
+        this._instance.destroy()
     }
 }
