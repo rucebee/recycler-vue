@@ -4,7 +4,11 @@ import {timeout} from 'robo'
 const NOOP = () => {
 }
 
-function AbstractSource(list) {
+function AbstractSource() {
+    const list = []
+    let recycler
+
+    this.attached = false
     this.list = list
     this.getItem = position => list[position]
     this.itemCount = () => list.length
@@ -41,7 +45,9 @@ function AbstractSource(list) {
         return this
     }
 
-    this.setRecycler = recycler => {
+    this.setRecycler = _recycler => {
+        recycler = _recycler
+
         if (recycler) {
             this.onDatasetChanged = recycler.onDatasetChanged
             this.onUpdate = recycler.onUpdate
@@ -52,7 +58,17 @@ function AbstractSource(list) {
             this.endPosition = recycler.endPosition
 
             this.onDatasetChanged()
+
+            if (!this.attached) {
+                this.attached = true
+                this.onAttach()
+            }
         } else {
+            if (this.attached) {
+                this.attached = false
+                this.onDetach()
+            }
+
             this.onDatasetChanged = NOOP
             this.onUpdate = NOOP
             this.onInsert = NOOP
@@ -63,8 +79,16 @@ function AbstractSource(list) {
         }
     }
 
+    this.removeRecycler = _recycler => {
+        if (recycler === _recycler)
+            this.setRecycler(null)
+    }
+
     this.setRecycler(null)
 }
+
+AbstractSource.prototype.onAttach = NOOP
+AbstractSource.prototype.onDetach = NOOP
 
 AbstractSource.prototype.update = function (...items) {
     for (const item of items) {
@@ -83,6 +107,8 @@ AbstractSource.prototype.each = function (fn) {
 }
 
 export function ListSource(query) {
+    AbstractSource.call(this)
+
     const list = this.list
 
     this.query = () => query().then(_list => {
@@ -94,10 +120,15 @@ export function ListSource(query) {
     })
 }
 
-ListSource.prototype = new AbstractSource([null])
+ListSource.prototype = Object.create(AbstractSource.prototype)
+ListSource.prototype.constructor = ListSource
 
-export function WaterfallSource(query, limit) {
+export function WaterfallSource(query, limit, loadingItem) {
+    AbstractSource.call(this)
+
     const list = this.list, viewDistance = limit >> 1
+
+    list.push(loadingItem)
 
     let request
 
@@ -127,36 +158,42 @@ export function WaterfallSource(query, limit) {
     }
 }
 
-WaterfallSource.prototype = new AbstractSource([null])
+WaterfallSource.prototype = Object.create(AbstractSource.prototype)
+WaterfallSource.prototype.constructor = WaterfallSource
 
-export function HistorySource(queryNext, queryHistory, limit) {
+export function HistorySource(queryNext, queryHistory, limit, loadingItem, refreshPeriod = 0) {
+    AbstractSource.call(this)
+
     const self = this, list = this.list, viewDistance = limit >> 1
 
-    let attached = false, dirty = true,
+    list.push(loadingItem)
+
+    let dirty = true,
         requestNext = null, errorNextTimeout = timeout(0),
         requestHistory = {}, errorHistoryTimeout = timeout(0),
         oldestItem = null, latestItem = null,
-        refreshPeriod = 0, refreshTimeout = 0
+        refreshTimeout = 0
 
-    function cutHistory(_list) {
-        return false
+    function cutHistory() {
         const startPos = self.startPosition(),
             firstIndex = oldestItem ? 1 : 0
         if (startPos > limit && startPos - viewDistance < list.length - firstIndex) {
             self.remove(firstIndex, startPos - viewDistance)
-            oldestItem = _list[firstIndex]
+            oldestItem = list[firstIndex]
+
+            console.log('cutHistory', firstIndex, startPos - viewDistance, oldestItem)
 
             if (!firstIndex)
-                self.insert(0, null)
+                self.insert(0, loadingItem)
 
             return true
         }
     }
 
     this.onRange = (startPos, endPos) => {
-        if (false && !requestHistory && startPos <= viewDistance) {
+        if (!requestHistory && startPos <= viewDistance) {
             requestHistory = queryHistory(oldestItem, limit, this).then(_list => {
-                if (!cutHistory(_list)) {
+                if (!cutHistory()) {
                     if (_list.length) {
                         oldestItem = _list[0]
                         this.insert(1, ..._list)
@@ -171,27 +208,15 @@ export function HistorySource(queryNext, queryHistory, limit) {
                 //TODO
                 console.error(err)
 
-                if (attached) {
+                if (this.attached) {
                     errorHistoryTimeout.stop(true)
                     errorHistoryTimeout = timeout(50000, () => {
                         requestHistory = null
-                        if (attached) this.triggerUpdate()
+                        if (this.attached) this.triggerUpdate()
                     })
                 }
             })
         }
-    }
-
-    this.refreshPeriod = function (period) {
-        refreshPeriod = period || 0
-
-        if (refreshTimeout) {
-            clearTimeout(refreshTimeout)
-            refreshTimeout = 0
-        }
-
-        if (refreshPeriod)
-            this.refresh()
     }
 
     this.refresh = function () {
@@ -229,39 +254,42 @@ export function HistorySource(queryNext, queryHistory, limit) {
             if (dirty) {
                 self.refresh()
             } else if (!requestHistory || !oldestItem) {
-                if (cutHistory(_list))
+                if (cutHistory())
                     requestHistory = null
             }
         }).catch(err => {
             //TODO
             console.error(err)
 
-            if (attached) {
+            if (this.attached) {
                 errorNextTimeout.stop(true)
                 errorNextTimeout = timeout(50000, () => {
                     requestNext = null
-                    if (attached) self.refresh()
+                    if (this.attached) self.refresh()
                 })
             }
         })
     }
 
-    this.attach = function (period) {
-        attached = true
+    this.onAttach = function () {
+        if (refreshTimeout) {
+            clearTimeout(refreshTimeout)
+            refreshTimeout = 0
+        }
 
-        //this.refreshPeriod(period)
+        this.refresh()
     }
 
-    this.detach = function () {
-        attached = false
+    this.onDetach = function () {
+        if (refreshTimeout) {
+            clearTimeout(refreshTimeout)
+            refreshTimeout = 0
+        }
 
         errorNextTimeout.stop()
         errorHistoryTimeout.stop()
-
-        this.refreshPeriod(0)
     }
-
-    this.refresh()
 }
 
-HistorySource.prototype = new AbstractSource([null])
+HistorySource.prototype = Object.create(AbstractSource.prototype)
+HistorySource.prototype.constructor = HistorySource

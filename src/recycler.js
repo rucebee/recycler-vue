@@ -14,10 +14,13 @@ function beforeCreate() {
         isWindow, isFixed,
         wrapper, container,
 
+        source,
         _itemCount,
-        _itemBuilder,
-        _itemTop,
-        stackFromBottom
+        _getItem,
+        //_itemBuilder,
+        //_itemTop,
+        stackFromBottom,
+        emptySlot
 
     const vm = this,
         slots = {},
@@ -71,9 +74,9 @@ function beforeCreate() {
 
     let updateId,
 
-        itemCount,
-        itemBottom,
-        maxPosition,
+        itemCount = 0,
+        itemBottom = 0,
+        maxPosition = -1,
 
         position = -1,
         offset = 0,
@@ -129,27 +132,24 @@ function beforeCreate() {
             return h
         }
 
-        let itemBuilder = _itemBuilder(position),
-            hsTypeCache = hsCache[itemBuilder.type]
+        let item = _getItem(position),
+            //itemBuilder = _itemBuilder(position),
+            //type = itemBuilder.type,
+            type = item?.type || 'default',
+            hsTypeCache = hsCache[type]
 
         if (!hsTypeCache)
-            hsCache[itemBuilder.type] = hsTypeCache = []
+            hsCache[type] = hsTypeCache = []
 
         h = hsTypeCache.pop()
         if (!h) {
-            if (itemBuilder.type === 'Loading') {
-                h = slots['Loading']()
-                console.log(h, h.position, h.type)
-            } else {
-                h = itemBuilder.build()
-            }
+            const factory = slots[type] || emptySlot
+            h = factory()
 
             h.position = position
-            h.$root = vm
             h.$mount()
-            h.$emit = (...args) => vm.$emit.apply(vm, args)
+            //h.$emit = (...args) => vm.$emit.apply(vm, args)
             h._watcher.active = false
-
 
             h.style = h.$el.style
 
@@ -184,7 +184,7 @@ function beforeCreate() {
             //console.log('bind', position, h.source)
         }
 
-        h.top = _itemTop(position)
+        h.top = 0//_itemTop(position)
         if (!position) h.top += headerHeight
 
         if (h.maxHeight > 0) {
@@ -315,7 +315,7 @@ function beforeCreate() {
     function updateFrame() {
         itemCount = _itemCount()
         maxPosition = itemCount - 1
-        itemBottom = _itemTop(-1) + footerHeight
+        itemBottom = footerHeight// + _itemTop(-1)
 
         while (hs.length) hsPush(hs.pop())
 
@@ -370,15 +370,17 @@ function beforeCreate() {
             //console.log({scrollRatio, hsPosition, hsOffset})
         } else if (stackFromBottom) {
             if (position > maxPosition) {
-                hsPosition = 0
+                hsPosition = maxPosition
                 hs.push(h = hsPop(hsPosition))
 
-                hsOffset = 0
+                hsOffset = -footerHeight
             } else {
-                hsPosition = maxPosition - mmax(0, position)
+                hsPosition = position > -1 ? position : maxPosition
                 hs.push(h = hsPop(hsPosition))
 
                 hsOffset = clientHeight - offset - h.height
+                if (hsPosition !== maxPosition)
+                    hsOffset -= footerHeight
 
                 //console.log(hsPosition, hsOffset, '<-', position, offset)
             }
@@ -387,9 +389,9 @@ function beforeCreate() {
                 hsPosition = maxPosition
                 hs.push(h = hsPop(hsPosition))
 
-                hsOffset = 0
+                hsOffset = maxOffset
             } else {
-                hsPosition = mmax(0, position)
+                hsPosition = position > -1 ? position : 0
                 hs.push(h = hsPop(hsPosition))
 
                 hsOffset = offset
@@ -572,27 +574,31 @@ function beforeCreate() {
         hsFlush()
 
         if (stackFromBottom) {
-            position = maxPosition - hsPosition - hs.length + 1
+            // position = maxPosition - hsPosition - hs.length + 1
+            position = hsPosition + hs.length - 1
             offset = clientHeight - hsOffset - down + up
+            if (position !== maxPosition)
+                offset -= footerHeight
 
-            if (fluidCheck == 3) {
+            if (position === maxPosition && offset > -(lastHeight - footerHeight) / 2) {
+                position = -1
+            } else if (fluidCheck === 3) {
                 for (i = hs.length - 1; i >= 0; i--) {
                     if (hs[i].maxHeight) {
-                        position++
+                        position--
                         offset += hs[i].height
                     } else break
                 }
-            } else if (fluidCheck == 2) while (1) {
-                position++
+            } else if (fluidCheck === 2) while (1) {
+                position--
 
-                if (position < itemCount) {
+                if (position > -1) {
                     h = hsPop(position)
                     offset += h.height
                     hsPush(h)
 
                     if (!h.maxHeight) break
                 } else {
-                    position = -1
                     //offset = 0
                     break
                 }
@@ -603,14 +609,14 @@ function beforeCreate() {
             position = hsPosition
             offset = hsOffset
 
-            if (fluidCheck == 3) {
+            if (fluidCheck === 3) {
                 for (h of hs) {
                     if (h.maxHeight) {
                         position++
                         offset += h.height
                     } else break
                 }
-            } else if (fluidCheck == 2) while (1) {
+            } else if (fluidCheck === 2) while (1) {
                 position--
 
                 if (position > -1) {
@@ -757,13 +763,15 @@ function beforeCreate() {
     }
 
     function created() {
-        _itemCount = this.itemCount
-        _itemBuilder = this.itemBuilder
-        _itemTop = this.itemTop
+        source = this.source
+
+        _itemCount = source.itemCount
+        _getItem = source.getItem
+
         stackFromBottom = this.stackFromBottom
 
         itemCount = _itemCount()
-        itemBottom = _itemTop(-1)
+        //itemBottom = _itemTop(-1)
         maxPosition = itemCount - 1
     }
 
@@ -808,11 +816,21 @@ function beforeCreate() {
                         dataFn = Ctor.options.data
 
                     Ctor.options.data = function () {
-                        const data = dataFn.call(this)
+                        const data = dataFn ? dataFn.call(this) : {}
+                        // data.type = type
+                        // data.source = source
+                        // data.item = null
                         data.position = -1
-                        data.type = type
                         return data
                     }
+
+                    Ctor.options.computed = _.extend(Ctor.options.computed, {
+                        type: () => type,
+                        source: () => source,
+                        item() {
+                            return _getItem(this.position)
+                        }
+                    })
 
                     slots[type] = () => new Ctor({
                         _isComponent: true,
@@ -821,14 +839,23 @@ function beforeCreate() {
                     })
                 })(type, vnode)
 
-
                 continue loop
             }
 
-        console.log(slots)
+        const Vue = this.$root.__proto__.constructor
+
+        emptySlot = () => new Vue({
+            render: h => h('div')
+        })
+
+        //console.log(slots, emptySlot)
+
+        source.setRecycler(vm)
     }
 
     function beforeDestroy() {
+        source.removeRecycler(vm)
+
         if (win.recycler === this)
             delete win.recycler
 
@@ -863,6 +890,23 @@ function beforeCreate() {
     _.mergeWith(this.$options, {created, mounted, beforeDestroy}, (objValue, srcValue) =>
         _.isArray(objValue) ? objValue.concat([srcValue]) : (objValue ? undefined : [srcValue]))
 
+    this.$options.watch = _.defaults({
+        source(newValue) {
+            source = newValue
+
+            _itemCount = source.itemCount
+            _getItem = source.getItem
+
+            this.onDatasetChanged()
+        },
+        stackFromBottom(newValue) {
+            stackFromBottom = newValue
+
+            this.onDatasetChanged()
+        }
+
+    }, this.$options.watch)
+
     this.$options.methods = _.defaults({
         onDatasetChanged() {
             //console.log('update', hsPosition, position, _position, count)
@@ -879,7 +923,7 @@ function beforeCreate() {
         onInsert(_position, count) {
             //console.log('insert', hsPosition, position, _position, count)
 
-            if (_position <= position)
+            if (!(stackFromBottom && position == -1) && _position <= position)
                 position += count
 
             for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
@@ -946,33 +990,19 @@ function beforeCreate() {
 export default {
     name: 'Recycler',
 
-    Builder(Vue, component, propsData) {
-        const Component = Vue.extend(component),
-            data = component.data?.() ?? {},
-            dataFn = () => _.assign({position: undefined, type: component.name}, data)
-
-        this.type = component.name
-        this.build = () => new Component({
-            data: dataFn,
-            propsData: propsData
-        })
-    },
-
     props: {
-        itemCount: {
-            type: Function,
+        source: {
+            type: Object,
             required: true
         },
-        itemBuilder: {
-            type: Function,
-            required: true
-        },
-        stackFromBottom: Boolean,
-        itemTop: {
-            type: Function,
-            default: () => 0
-        }
+        stackFromBottom: Boolean
     },
+
+    // watch: {
+    //     source(newValue, value) {
+    //         console.log(newValue, value)
+    //     }
+    // },
 
     render(h) {
         return h('div', {
