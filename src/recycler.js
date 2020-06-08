@@ -9,33 +9,39 @@ const mmin = Math.min,
     NEAR_ZERO = .0001,
     NEAR_ONE = 1 - NEAR_ZERO
 
-function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
-    const win = vm.$el.closest('.recycler-window') ?? window,
-        isWindow = win === window,
-        isFixed = isWindow,
-        doc = isWindow ? document.documentElement : win,
+function beforeCreate() {
+    let el, win, doc,
+        isWindow, isFixed,
+        wrapper, container,
 
-        timeStamp = Date.now() <= new Event('check').timeStamp ? Date.now : performance.now.bind(performance),
+        _itemCount,
+        _itemBuilder,
+        _itemTop,
+        stackFromBottom
 
-        wrapper = vm.$el.children[0],
-        container = wrapper.children[0],
+    const vm = this,
+        slots = {},
 
         hs = [],
         hsBinded = [],
         hsCache = {},
+
+        timeStamp = Date.now() <= new Event('check').timeStamp ? Date.now : performance.now.bind(performance),
 
         _scroll = top => {
             win.scrollTo(doc.scrollLeft, top)
             scrollTime = timeStamp()
             //console.log('_scroll', scrollTime)
         },
+
         _clientHeight = isWindow ? () => win.innerHeight : () => doc.clientHeight,
+
         _bodyHeight = () => {
             const EMPTY_DIV = document.createElement('div'),
-                ADD_1PX = vm.$el.offsetHeight ? 0 : 1
+                ADD_1PX = el.offsetHeight ? 0 : 1
 
             EMPTY_DIV.style.height = '1px'
-            if (ADD_1PX) vm.$el.style.minHeight = '1px'
+            if (ADD_1PX) el.style.minHeight = '1px'
 
             let height = 0
             //let stat
@@ -56,50 +62,43 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
                 EMPTY_DIV.remove()
             }
 
-            if (ADD_1PX) vm.$el.style.minHeight = ''
+            if (ADD_1PX) el.style.minHeight = ''
 
             //console.log(...stat)
 
             return height
         }
 
-    if (isFixed) {
-        container.style.position = 'fixed'
-        container.style.top = 0
-        //container.style.left = 0
-        //container.style.right = 0
-        container.style.bottom = 0
-    }
+    let updateId,
 
-    win.recycler = vm
-
-    let scrollTime = 0,
-
-        updateId,
-
-        itemCount = _itemCount(),
-        itemBottom = _itemTop(-1),
-        maxPosition = itemCount - 1,
+        itemCount,
+        itemBottom,
+        maxPosition,
 
         position = -1,
         offset = 0,
 
         hsPosition = 0,
+        hsOffset = 0,
         hsHeight = 0,
-        maxOffset,
-        hsOffset,
         allShown = true,
 
         clientHeight,
         clientHeightEx,
-        scrollTop,
-        scrollMax,
-        scrollRatio,
+
         scrollHeight = 0,
         headerHeight = 0,
         footerHeight = 0,
+
         firstHeight = 0,
-        lastHeight = 0
+        lastHeight = 0,
+
+        scrollTop,
+        scrollMax,
+        scrollRatio,
+        maxOffset,
+
+        scrollTime = 0
 
     const update = () => {
             if (updateId)
@@ -116,6 +115,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             updateCancel()
             updateFrame()
         }
+
 
     function hsPop(position) {
         let h
@@ -137,15 +137,21 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
         h = hsTypeCache.pop()
         if (!h) {
-            h = itemBuilder.build()
+            if (itemBuilder.type === 'Loading') {
+                h = slots['Loading']()
+                console.log(h, h.position, h.type)
+            } else {
+                h = itemBuilder.build()
+            }
 
             h.position = position
+            h.$root = vm
             h.$mount()
             h.$emit = (...args) => vm.$emit.apply(vm, args)
             h._watcher.active = false
 
+
             h.style = h.$el.style
-            h.className = h.$el.className
 
             const style = h.style
             style.position = 'absolute'
@@ -167,7 +173,6 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
             //console.log('create', position)
         } else {
-            h.$el.className = h.className
             container.append(h.$el)
 
             //h.style.display = ''
@@ -225,35 +230,33 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
     function hsInvalidate(_position, count) {
         if (hsPosition >= itemCount) {
-            if (!_position)
-                firstHeight = 0
-
+            if (_position <= 1) firstHeight = 0
             lastHeight = 0
 
-            for (let h of hs) h.height = 0
+            for (const h of hs) h.height = 0
 
             return true
         }
 
         if (!count) return true
 
-        if (_position >= hsPosition && _position <= hsPosition + hs.length
-            || hsPosition >= _position && hsPosition <= _position + count) {
+        if (_position - 1 >= hsPosition && _position - 1 <= hsPosition + hs.length
+            || hsPosition >= _position - 1 && hsPosition <= _position + count + 1) {
 
-            if (!_position)
+            if (_position <= 1)
                 firstHeight = 0
 
-            if (_position + count >= itemCount)
+            if (_position + count + 1 >= itemCount)
                 lastHeight = 0
 
-            for (let i = mmax(0, _position - hsPosition), len = mmin(hs.length, _position - hsPosition + count); i < len; i++)
+            for (let i = mmax(0, _position - 1 - hsPosition), len = mmin(hs.length, _position + count + 1 - hsPosition); i < len; i++)
                 hs[i].height = 0
 
             return true
         }
 
-        if (_position + count >= itemCount && lastHeight) {
-            if (!_position)
+        if (_position + count + 1 >= itemCount && lastHeight) {
+            if (_position <= 1)
                 firstHeight = 0
 
             lastHeight = 0
@@ -261,7 +264,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             return true
         }
 
-        if (!_position) {
+        if (_position <= 1) {
             firstHeight = 0
 
             return true
@@ -291,18 +294,20 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             scrollHeight = height
 
             wrapper.style.height = (scrollHeight - headerHeight - footerHeight) + 'px'
-            if (!isFixed)
+            if (isFixed)
+                container.style.width = wrapper.offsetWidth + 'px'
+            else
                 container.style.height = (scrollHeight - footerHeight) + 'px'
 
             // clientHeight = _clientHeight()
             // clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
             scrollMax = mmax(0, doc.scrollHeight - clientHeight)
 
-            // console.log('scrollHeight', {
+            // console.log('scrollMax', {
             //     scrollHeight,
             //     _scrollHeight: doc.scrollHeight,
             //     clientHeight,
-            //     scrollTopMax
+            //     scrollMax
             // })
         }
     }
@@ -352,9 +357,9 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
             hs.push(h = hsPop(hsPosition))
         } else if (scrolling) {
-            scrollRatio = mmax(0, mmin(1, scrollMax > 0 ? scrollTop / scrollMax : 0))
+            scrolled = true
 
-            //console.log({scrolling, scrollRatio, scrollTop, scrollTopMax})
+            scrollRatio = mmax(0, mmin(1, scrollMax > 0 ? scrollTop / scrollMax : 0))
 
             const positionReal = maxPosition * scrollRatio
 
@@ -362,8 +367,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
             hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
 
-            //console.log({hsOffset, hsPosition, hheight: h.height, positionReal, scrollRatio})
-            //console.log('scroll', scrollTop, scrollTopMax, scrollRatio, positionReal)
+            //console.log({scrollRatio, hsPosition, hsOffset})
         } else if (stackFromBottom) {
             if (position > maxPosition) {
                 hsPosition = 0
@@ -376,7 +380,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
                 hsOffset = clientHeight - offset - h.height
 
-                //console.log(hsPosition, hsOffset, '<-', position, _offset)
+                //console.log(hsPosition, hsOffset, '<-', position, offset)
             }
         } else {
             if (position > maxPosition) {
@@ -439,10 +443,10 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
 
             up = -scrollTop
         } else {
-            if (bottomSpace > 0) {
-                up += bottomSpace
-                hsOffset = up
-            }
+            // if (bottomSpace > 0) {
+            //     up += bottomSpace
+            //     hsOffset = up
+            // }
 
             if (hsPosition == 0 && hsOffset > 0) {
                 hsOffset = 0
@@ -469,23 +473,38 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
                 //
                 // scrollTop = (hsOffset - hsPosition * h.height) / (maxOffset - maxPosition * h.height) * scrollTopMax
 
-                let newScrollTop = scrollTop, hOffset = hsOffset
+                let newScrollTop = scrollTop, hOffset = hsOffset, delta = Number.MAX_VALUE, offsetRatio = 1
                 //const stat = []
 
                 for (let i = 0; i < hs.length; i++) {
                     const hh = hs[i].height,
-                        scrollTop = scrollMax * (hOffset - (hsPosition + i) * hh) / (maxOffset - maxPosition * hh),
-                        offsetRatio = maxPosition * scrollTop / scrollMax - (hsPosition + i)
+                        _scrollTop = scrollMax * (hOffset - (hsPosition + i) * hh) / (maxOffset - maxPosition * hh),
+                        _offsetRatio = maxPosition * _scrollTop / scrollMax - (hsPosition + i)
 
-                    //stat.push({'#': hsPosition + i, scrollTop, offsetRatio})
+                    if (scrolled) {
+                        const _delta = mabs(scrollTop - _scrollTop)
 
-                    if (offsetRatio > -NEAR_ZERO && offsetRatio < 1) {
-                        newScrollTop = scrollTop
-                        break
+                        //stat.push({'#': hsPosition + i, _scrollTop, _offsetRatio, _delta})
+
+                        if (_offsetRatio > -NEAR_ZERO && _offsetRatio < 1 && _delta < delta) {
+                            delta = _delta
+                            newScrollTop = _scrollTop
+                            //break
+                        }
+                    } else {
+                        //stat.push({'#': hsPosition + i, _scrollTop, _offsetRatio})
+
+                        if (_offsetRatio > -NEAR_ZERO && _offsetRatio < offsetRatio) {
+                            offsetRatio = _offsetRatio
+                            newScrollTop = _scrollTop
+                            //break
+                        }
                     }
 
                     hOffset += hh
                 }
+
+                //console.log(stat)
 
                 if (Math.abs(scrollTop - newScrollTop) >= 1) {
                     //console.log('adjustScroll', {scrollTop, newScrollTop})
@@ -495,8 +514,8 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             }
         }
 
-        if (stackFromBottom && scrollHeight < clientHeight)
-            up += clientHeight - scrollHeight
+        // if (stackFromBottom && scrollHeight < clientHeight)
+        //     up += clientHeight - scrollHeight
 
         const scrollOffset = isFixed ? 0 : scrollTop
         down = up
@@ -618,7 +637,8 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         win.dispatchEvent(scrolledEvent = new Event('scroll'))
     }
 
-    let scrolling = false,
+    let scrolled = false,
+        scrolling = false,
         scrolledEvent = null,
         scrollStarted = 0,
         scrollEndTimeout,
@@ -641,7 +661,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             container.style.top = -headerHeight + 'px'
 
         const bodyHeight = _bodyHeight()
-        footerHeight = bodyHeight - headerHeight - vm.$el.offsetHeight
+        footerHeight = bodyHeight - headerHeight - el.offsetHeight
 
         // console.log('resize', {
         //     clientHeight,
@@ -649,7 +669,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         //     scrollTopMax,
         //     headerHeight,
         //     bodyHeight,
-        //     elHeight: vm.$el.offsetHeight,
+        //     elHeight: el.offsetHeight,
         //     footerHeight
         // })
 
@@ -736,21 +756,80 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         }
     }
 
-    addEventListener('resize', onResize)
-    win.addEventListener('scroll', onScroll, true)
-    win.addEventListener('wheel', onScrollContinue, true)
-    win.addEventListener('mousedown', onScrollContinue, true)
+    function created() {
+        _itemCount = this.itemCount
+        _itemBuilder = this.itemBuilder
+        _itemTop = this.itemTop
+        stackFromBottom = this.stackFromBottom
 
-    win.addEventListener('touchstart', onTouchStart, true)
+        itemCount = _itemCount()
+        itemBottom = _itemTop(-1)
+        maxPosition = itemCount - 1
+    }
 
-    onResize()
-    //onScrollContinue()
-    //win.dispatchEvent(new Event('scroll'))
+    function mounted() {
+        el = this.$el
+        win = el.closest('.recycler-window') ?? window
+        isWindow = win === window
+        isFixed = isWindow
+        doc = isWindow ? document.documentElement : win
 
-    win.recycler = vm
+        wrapper = el.children[0]
+        container = wrapper.children[0]
 
-    this.destroy = () => {
-        if (win.recycler === vm)
+        if (isFixed) {
+            container.style.position = 'fixed'
+            container.style.top = 0
+            //container.style.left = 0
+            //container.style.right = 0
+            container.style.bottom = 0
+        }
+
+        addEventListener('resize', onResize)
+        win.addEventListener('scroll', onScroll, true)
+        win.addEventListener('wheel', onScrollContinue, true)
+        win.addEventListener('mousedown', onScrollContinue, true)
+
+        win.addEventListener('touchstart', onTouchStart, true)
+
+        onResize()
+        //onScrollContinue()
+        //win.dispatchEvent(new Event('scroll'))
+
+        win.recycler = this
+
+        loop: for (const type in vm.$slots)
+            for (const vnode of vm.$slots[type]) {
+                if (!vnode || !vnode.componentOptions)
+                    continue;
+
+                ((type, vnode) => {
+                    const Ctor = vnode.componentOptions.Ctor,
+                        dataFn = Ctor.options.data
+
+                    Ctor.options.data = function () {
+                        const data = dataFn.call(this)
+                        data.position = -1
+                        data.type = type
+                        return data
+                    }
+
+                    slots[type] = () => new Ctor({
+                        _isComponent: true,
+                        _parentVnode: vnode,
+                        parent: vm
+                    })
+                })(type, vnode)
+
+
+                continue loop
+            }
+
+        console.log(slots)
+    }
+
+    function beforeDestroy() {
+        if (win.recycler === this)
             delete win.recycler
 
         removeEventListener('resize', onResize)
@@ -781,7 +860,10 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         scrollHeight = 0
     }
 
-    _.assign(vm, {
+    _.mergeWith(this.$options, {created, mounted, beforeDestroy}, (objValue, srcValue) =>
+        _.isArray(objValue) ? objValue.concat([srcValue]) : (objValue ? undefined : [srcValue]))
+
+    this.$options.methods = _.defaults({
         onDatasetChanged() {
             //console.log('update', hsPosition, position, _position, count)
 
@@ -800,9 +882,8 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             if (_position <= position)
                 position += count
 
-            for (let i = mmax(0, _position - hsPosition); i < hs.length; i++) {
+            for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
                 hs[i].position += count
-            }
 
             if (hsInvalidate(_position, count)) update()
         },
@@ -840,9 +921,17 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
             position = _position < 0 ? itemCount + _position : _position ?? 0
             offset = _offset === undefined ? (position ? headerHeight : 0) : _offset
 
-            console.log('position', {position, offset})
+            //console.log('position', {position, offset})
 
             update()
+        },
+
+        startPosition() {
+            return hsPosition
+        },
+
+        endPosition() {
+            return hsPosition + hs.length - 1
         },
 
         // positionReal = maxPosition * scrollRatio = 1
@@ -851,7 +940,7 @@ function Instance(vm, _itemCount, _itemBuilder, _itemTop, stackFromBottom) {
         scrollTop: () => hsPosition
             ? firstHeight + (doc.scrollTop - scrollMax / maxPosition) / (scrollMax - scrollMax / maxPosition) * (scrollMax - firstHeight)
             : -offset
-    })
+    }, this.$options.methods)
 }
 
 export default {
@@ -867,10 +956,6 @@ export default {
             data: dataFn,
             propsData: propsData
         })
-    },
-
-    data() {
-        return {}
     },
 
     props: {
@@ -907,11 +992,5 @@ export default {
         )
     },
 
-    mounted() {
-        this._instance = new Instance(this, this.itemCount, this.itemBuilder, this.itemTop, this.stackFromBottom)
-    },
-
-    beforeDestroy() {
-        this._instance.destroy()
-    }
+    beforeCreate
 }
