@@ -1,5 +1,11 @@
-import _ from 'lodash'
-import {animate} from 'robo'
+import {
+    defaults as l_defaults,
+    extend as l_extend,
+    mergeWith as l_mergeWith,
+    find as l_find,
+    findIndex as l_findIndex
+} from 'lodash-es'
+import {animate} from '@rucebee/util'
 
 const mmin = Math.min,
     mmax = Math.max,
@@ -17,8 +23,6 @@ function beforeCreate() {
         source,
         _itemCount,
         _getItem,
-        //_itemBuilder,
-        //_itemTop,
         stackFromBottom,
         emptySlot
 
@@ -75,7 +79,6 @@ function beforeCreate() {
     let updateId,
 
         itemCount = 0,
-        itemBottom = 0,
         maxPosition = -1,
 
         position = -1,
@@ -99,6 +102,7 @@ function beforeCreate() {
         scrollTop,
         scrollMax,
         scrollRatio,
+        scrollGap = 999,
         maxOffset,
 
         scrollTime = 0
@@ -118,7 +122,6 @@ function beforeCreate() {
             updateCancel()
             updateFrame()
         }
-
 
     function hsPop(position) {
         let h
@@ -141,7 +144,19 @@ function beforeCreate() {
         if (!hsTypeCache)
             hsCache[type] = hsTypeCache = []
 
-        h = hsTypeCache.pop()
+        if (item.id) {
+            let index = l_findIndex(hsTypeCache, ['id', item.id])
+            if (index < 0)
+                index = l_findIndex(hsTypeCache, ['id', undefined])
+
+            if (index > -1) {
+                h = hsTypeCache[index]
+                hsTypeCache.splice(index, 1)
+            }
+        } else {
+            h = hsTypeCache.pop()
+        }
+
         if (!h) {
             const factory = slots[type] || emptySlot
             h = factory()
@@ -150,6 +165,9 @@ function beforeCreate() {
             h.$mount()
             //h.$emit = (...args) => vm.$emit.apply(vm, args)
             h._watcher.active = false
+
+            h.position = -1
+            h.position = position
 
             h.style = h.$el.style
 
@@ -173,7 +191,8 @@ function beforeCreate() {
 
             //console.log('create', position)
         } else {
-            container.append(h.$el)
+            if (!h.$el.parentElement)
+                container.append(h.$el)
 
             //h.style.display = ''
 
@@ -184,12 +203,14 @@ function beforeCreate() {
             //console.log('bind', position, h.source)
         }
 
+        h.id = item.id
+
         h.top = 0//_itemTop(position)
         if (!position) h.top += headerHeight
 
         if (h.maxHeight > 0) {
             h.height = mmax(h.minHeight, h.maxHeight * clientHeight)
-                + h.top + (position == maxPosition ? itemBottom : 0)
+                + h.top + (position == maxPosition ? footerHeight : 0)
 
             //Doing it later:
             //h.style.height = h.height + 'px'
@@ -197,7 +218,7 @@ function beforeCreate() {
             h.height = h.$el.offsetHeight + h.top
 
             if (position == maxPosition)
-                h.height += itemBottom
+                h.height += footerHeight
         }
 
         return h
@@ -213,19 +234,35 @@ function beforeCreate() {
         let type = h.type,
             hsTypeCache = hsCache[type]
 
-        h.$el.remove()
+        //h.$el.remove()
         //h.style.display = 'none'
+
+        if (!hsTypeCache) {
+            //console.log('hsPush', {hsCache, slots, type, h})
+
+            hsCache[type] = hsTypeCache = []
+        }
 
         hsTypeCache.push(h)
     }
 
     function hsFlush() {
         for (let i in hsBinded) {
-            hsBinded[i].height = 0
-            hsPush(hsBinded[i])
+            const h = hsBinded[i]
+            h.height = 0
+            hsPush(h)
         }
 
         hsBinded.length = 0
+
+        for (const type in hsCache) {
+            const hsTypeCache = hsCache[type]
+
+            for (const h of hsTypeCache) {
+                if (h.$el.parentElement)
+                    h.$el.remove()
+            }
+        }
     }
 
     function hsInvalidate(_position, count) {
@@ -288,16 +325,15 @@ function beforeCreate() {
                     ? (hsHeight - fluidHeight) * itemCount / (hs.length - fluidCount) + fluidHeight
                     : 2 * clientHeight
                 )
-        ))
+        ))// + 2 * scrollGap
+
+        //console.log({height, scrollHeight, clientHeight})
 
         if (scrollHeight != height) {
             scrollHeight = height
 
             wrapper.style.height = (scrollHeight - headerHeight - footerHeight) + 'px'
-            if (isFixed)
-                container.style.width = wrapper.offsetWidth + 'px'
-            else
-                container.style.height = (scrollHeight - footerHeight) + 'px'
+            container.style.height = (scrollHeight - footerHeight) + 'px'
 
             // clientHeight = _clientHeight()
             // clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
@@ -315,14 +351,13 @@ function beforeCreate() {
     function updateFrame() {
         itemCount = _itemCount()
         maxPosition = itemCount - 1
-        itemBottom = footerHeight// + _itemTop(-1)
 
         while (hs.length) hsPush(hs.pop())
 
         if (!itemCount) {
             hsFlush()
 
-            if (!scrolling && !touching)
+            if (!scrolling)
                 vm.$emit('laidout', 0, hs)
 
             win.dispatchEvent(scrolledEvent = new Event('scroll'))
@@ -348,42 +383,52 @@ function beforeCreate() {
 
         scrollTop = win.scrollY
 
+        //console.log({position, offset, hsPosition, hsOffset, itemCount})
         //console.log({scrollTop, scrolling, touching})
 
-        if (touching) {
-            hsOffset -= scrollTop - touchTop
-
-            touchTop = scrollTop
-
-            hs.push(h = hsPop(hsPosition))
-        } else if (scrolling) {
+        // if (touching) {
+        //     hsOffset -= scrollTop - touchTop
+        //
+        //     touchTop = scrollTop
+        //
+        //     hs.push(h = hsPop(hsPosition))
+        // } else
+        if (scrolling) {
             scrolled = true
 
-            scrollRatio = mmax(0, mmin(1, scrollMax > 0 ? scrollTop / scrollMax : 0))
+            if (touching) {
+                hs.push(h = hsPop(hsPosition = touchPosition))
 
-            const positionReal = maxPosition * scrollRatio
+                hsOffset = touchOffset - scrollTop + touchTop
+            } else {
+                scrollRatio = mmax(0, mmin(1, scrollMax > 0 ? scrollTop / scrollMax : 0))
 
-            hs.push(h = hsPop(hsPosition = mfloor(positionReal)))
+                const positionReal = maxPosition * scrollRatio
 
-            hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
+                hs.push(h = hsPop(hsPosition = mfloor(positionReal)))
 
-            //console.log({scrollRatio, hsPosition, hsOffset})
+                hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
+
+                //console.log('scrolling', {scrollRatio, hsPosition, hsOffset})
+            }
+
+            //console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop})
         } else if (stackFromBottom) {
             if (position > maxPosition) {
                 hsPosition = maxPosition
                 hs.push(h = hsPop(hsPosition))
 
-                hsOffset = -footerHeight
+                //hsOffset = -footerHeight
             } else {
                 hsPosition = position > -1 ? position : maxPosition
                 hs.push(h = hsPop(hsPosition))
 
                 hsOffset = clientHeight - offset - h.height
-                if (hsPosition !== maxPosition)
-                    hsOffset -= footerHeight
-
-                //console.log(hsPosition, hsOffset, '<-', position, offset)
+                // if (hsPosition !== maxPosition)
+                //     hsOffset -= footerHeight
             }
+
+            //console.log('stackFromBottom <-', {hsPosition, hsOffset, position, offset})
         } else {
             if (position > maxPosition) {
                 hsPosition = maxPosition
@@ -396,6 +441,8 @@ function beforeCreate() {
 
                 hsOffset = offset
             }
+
+            //console.log('stackFromBottom <-', {hsPosition, hsOffset, position, offset})
         }
 
         up = hsOffset
@@ -433,6 +480,27 @@ function beforeCreate() {
         }
 
         allShown = hs.length == itemCount && hsHeight < clientHeightEx + 1
+
+        if (!scrolling) {
+            if (stackFromBottom) {
+                if (bottomSpace > 0) {
+                    up += bottomSpace
+                    hsOffset = up
+                } else if (!hsPosition && hsOffset > 0) {
+                    up -= mmin(-bottomSpace, hsOffset)
+                    hsOffset = up
+                }
+            } else if (!hsPosition) {
+                if (hsOffset >= 0) {
+                    up = 0
+                    hsOffset = 0
+                } else if (bottomSpace > 0) {
+                    up += mmin(bottomSpace, -hsOffset)
+                    hsOffset = up
+                }
+            }
+        }
+
         if (allShown) {
             if (!scrolling) {
                 _scrollMax()
@@ -450,17 +518,20 @@ function beforeCreate() {
             //     hsOffset = up
             // }
 
-            if (hsPosition == 0 && hsOffset > 0) {
-                hsOffset = 0
-                up = 0
+            // if (hsPosition == 0 && hsOffset > 0) {
+            //     hsOffset = 0
+            //     up = 0
+            //
+            //     if (touching || !scrolling) {
+            //         _scrollMax()
+            //
+            //         _scroll(touchTop = scrollTop = 0)
+            //         scrollRatio = 0
+            //     }
+            // } else
 
-                if (touching || !scrolling) {
-                    _scrollMax()
-
-                    _scroll(touchTop = scrollTop = 0)
-                    scrollRatio = 0
-                }
-            } else if (touching || !scrolling) {
+            //if (touching || !scrolling) {
+            if (!scrolling) {
                 _scrollMax()
 
                 // scrollRatio = scrollTop / scrollTopMax
@@ -537,7 +608,7 @@ function beforeCreate() {
                 let top = down, height = h.height - h.top
 
                 if (hsPosition + j == maxPosition)
-                    height -= itemBottom
+                    height -= footerHeight
 
                 if (!allShown) {
                     if (j == 0 && down + h.top < 0) {
@@ -571,18 +642,22 @@ function beforeCreate() {
             }
         }
 
+        if (scrolling && touching) {
+            //console.log('fixed', {hsPosition, hsOffset})
+
+            touchPosition = hsPosition
+            touchOffset = hsOffset
+            touchTop = scrollTop
+        }
+
         hsFlush()
 
         if (stackFromBottom) {
             // position = maxPosition - hsPosition - hs.length + 1
             position = hsPosition + hs.length - 1
             offset = clientHeight - hsOffset - down + up
-            if (position !== maxPosition)
-                offset -= footerHeight
 
-            if (position === maxPosition && offset > -(lastHeight - footerHeight) / 2) {
-                position = -1
-            } else if (fluidCheck === 3) {
+            if (fluidCheck === 3) {
                 for (i = hs.length - 1; i >= 0; i--) {
                     if (hs[i].maxHeight) {
                         position--
@@ -604,7 +679,15 @@ function beforeCreate() {
                 }
             }
 
-            //console.log(hsPosition, hsOffset, '->', position, offset)
+            // if (position !== maxPosition)
+            //     offset -= footerHeight
+            // else if (offset > -(lastHeight - footerHeight) / 2)
+            //     position = -1
+            //
+            // if (position === maxPosition && offset > -(lastHeight - footerHeight) / 2)
+            //     position = -1
+
+            //console.log('stackFromBottom ->', {hsPosition, hsOffset, position, offset, maxPosition})
         } else {
             position = hsPosition
             offset = hsOffset
@@ -637,7 +720,8 @@ function beforeCreate() {
         // position = hsPosition
         // offset = hsOffset
 
-        if (!scrolling && !touching)
+        //if (!scrolling && !touching)
+        if (!scrolling)
             vm.$emit('laidout', hsPosition, hs)
 
         win.dispatchEvent(scrolledEvent = new Event('scroll'))
@@ -650,7 +734,9 @@ function beforeCreate() {
         scrollEndTimeout,
 
         touching = false,
-        touchTop
+        touchTop,
+        touchPosition,
+        touchOffset
 
 
     const onResize = () => {
@@ -715,7 +801,7 @@ function beforeCreate() {
         if (scrollEndTimeout)
             clearTimeout(scrollEndTimeout)
         if (scrollStarted > 0)
-            scrollEndTimeout = setTimeout(onScrollEnd, 200)
+            scrollEndTimeout = setTimeout(onScrollEnd, 500)
     }, onScrollEnd = ev => {
         //console.log('onScrollEnd', ev?.type)
 
@@ -734,6 +820,9 @@ function beforeCreate() {
 
         if (scrolling) {
             scrolling = false
+            //touching = false
+
+            console.log('onScrollEnd', ev)
 
             update()
         }
@@ -748,6 +837,8 @@ function beforeCreate() {
         win.addEventListener('touchend', onTouchEnd)
 
         touchTop = doc.scrollTop
+        touchPosition = hsPosition
+        touchOffset = hsOffset
 
         touching = true
     }, onTouchEnd = ev => {
@@ -755,11 +846,11 @@ function beforeCreate() {
 
         win.removeEventListener('touchend', onTouchEnd)
 
-        if (touching) {
-            touching = false
-
-            update()
-        }
+        // if (touching) {
+        //     touching = false
+        //
+        //     update()
+        // }
     }
 
     function created() {
@@ -771,7 +862,6 @@ function beforeCreate() {
         stackFromBottom = this.stackFromBottom
 
         itemCount = _itemCount()
-        //itemBottom = _itemTop(-1)
         maxPosition = itemCount - 1
     }
 
@@ -779,7 +869,7 @@ function beforeCreate() {
         el = this.$el
         win = el.closest('.recycler-window') ?? window
         isWindow = win === window
-        isFixed = isWindow
+        isFixed = false //isWindow
         doc = isWindow ? document.documentElement : win
 
         wrapper = el.children[0]
@@ -787,6 +877,7 @@ function beforeCreate() {
 
         if (isFixed) {
             container.style.position = 'fixed'
+            //container.style.overflow = 'hidden !important'
             container.style.top = 0
             //container.style.left = 0
             //container.style.right = 0
@@ -813,9 +904,11 @@ function beforeCreate() {
 
                 ((type, vnode) => {
                     const Ctor = vnode.componentOptions.Ctor,
-                        dataFn = Ctor.options.data
+                        oldOptions = Ctor.options,
+                        options = Object.assign({}, oldOptions),
+                        dataFn = options.data
 
-                    Ctor.options.data = function () {
+                    options.data = function () {
                         const data = dataFn ? dataFn.call(this) : {}
                         // data.type = type
                         // data.source = source
@@ -824,19 +917,27 @@ function beforeCreate() {
                         return data
                     }
 
-                    Ctor.options.computed = _.extend(Ctor.options.computed, {
+                    options.computed = l_defaults({
                         type: () => type,
                         source: () => source,
                         item() {
                             return _getItem(this.position)
                         }
-                    })
+                    }, oldOptions.computed)
 
-                    slots[type] = () => new Ctor({
-                        _isComponent: true,
-                        _parentVnode: vnode,
-                        parent: vm
-                    })
+                    delete options.computed.position
+
+                    slots[type] = () => {
+                        Ctor.options = options
+                        const o = new Ctor({
+                            _isComponent: true,
+                            _parentVnode: vnode,
+                            parent: vm
+                        })
+                        Ctor.options = oldOptions
+
+                        return o
+                    }
                 })(type, vnode)
 
                 continue loop
@@ -850,11 +951,11 @@ function beforeCreate() {
 
         //console.log(slots, emptySlot)
 
-        source.setRecycler(vm)
+        source.attach(vm)
     }
 
     function beforeDestroy() {
-        source.removeRecycler(vm)
+        source.detach(vm)
 
         if (win.recycler === this)
             delete win.recycler
@@ -887,10 +988,10 @@ function beforeCreate() {
         scrollHeight = 0
     }
 
-    _.mergeWith(this.$options, {created, mounted, beforeDestroy}, (objValue, srcValue) =>
-        _.isArray(objValue) ? objValue.concat([srcValue]) : (objValue ? undefined : [srcValue]))
+    l_mergeWith(this.$options, {created, mounted, beforeDestroy}, (objValue, srcValue) =>
+        Array.isArray(objValue) ? objValue.concat([srcValue]) : (objValue ? undefined : [srcValue]))
 
-    this.$options.watch = _.defaults({
+    this.$options.watch = l_defaults({
         source(newValue) {
             source = newValue
 
@@ -907,24 +1008,33 @@ function beforeCreate() {
 
     }, this.$options.watch)
 
-    this.$options.methods = _.defaults({
+    this.$options.methods = l_defaults({
         onDatasetChanged() {
-            //console.log('update', hsPosition, position, _position, count)
+            //console.log('update', {hsPosition, position, _position, count})
 
             if (hsInvalidate(0, _itemCount())) update()
         },
 
         onUpdate(_position, count) {
-            //console.log('update', hsPosition, position, _position, count)
+            //console.log('update', {hsPosition, position, _position, count})
 
             if (hsInvalidate(_position, count)) update()
         },
 
         onInsert(_position, count) {
-            //console.log('insert', hsPosition, position, _position, count)
+            //console.log('insert', {hsPosition, position, _position, count, hsOffset, offset})
 
-            if (!(stackFromBottom && position == -1) && _position <= position)
-                position += count
+            // if (!(stackFromBottom && position == -1) && _position <= position)
+            //     position += count
+
+            if (stackFromBottom && position === maxPosition && offset > footerHeight - lastHeight / 2) {
+                if (_position <= maxPosition && hs.length > maxPosition && hs[maxPosition].maxHeight) {
+                    position = maxPosition + count - 1
+                    offset += footerHeight
+                }
+            } else {
+                if (_position <= position) position += count
+            }
 
             for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
                 hs[i].position += count
@@ -933,11 +1043,13 @@ function beforeCreate() {
         },
 
         onRemove(_position, count) {
-            //console.log('remove', hsPosition, position, _position, count)
+            //console.log('remove', {hsPosition, position, _position, count})
 
             const invalid = hsInvalidate(_position, count)
 
-            if (_position < position)
+            if (count >= itemCount)
+                position = -1
+            else if (_position < position)
                 position -= mmin(count, position - _position + 1)
 
             if (invalid) {
@@ -963,9 +1075,12 @@ function beforeCreate() {
                 return [position < 0 ? undefined : position, offset]
 
             position = _position < 0 ? itemCount + _position : _position ?? 0
-            offset = _offset === undefined ? (position ? headerHeight : 0) : _offset
+            offset = stackFromBottom
+                ? _offset === undefined ? (position != maxPosition ? footerHeight : 0) : _offset
+                //? _offset || 0
+                : _offset === undefined ? (position ? headerHeight : 0) : _offset
 
-            //console.log('position', {position, offset})
+            console.log('position', {position, offset})
 
             update()
         },
@@ -981,15 +1096,41 @@ function beforeCreate() {
         // positionReal = maxPosition * scrollRatio = 1
         // maxPosition * scrollTop / scrollTopMax = 1
         // scrollTop = scrollTopMax / maxPosition
-        scrollTop: () => hsPosition
-            ? firstHeight + (doc.scrollTop - scrollMax / maxPosition) / (scrollMax - scrollMax / maxPosition) * (scrollMax - firstHeight)
-            : -offset
+        scrollTop: top => {
+            if (top !== undefined) {
+                position = 0
+                offset = stackFromBottom ? clientHeight + top - firstHeight : -top
+
+                //console.log('scrollTop ->', {position, top, hsOffset})
+
+                update()
+
+                return
+            }
+
+            const _scrollTop = hsPosition
+                ? firstHeight + (doc.scrollTop - scrollMax / maxPosition) / (scrollMax - scrollMax / maxPosition) * (scrollMax - firstHeight)
+                : -hsOffset
+
+            //console.log('scrollTop <-', {hsPosition, _scrollTop})
+
+            return _scrollTop
+        },
+
+        offset(position) {
+            const h = hs[position - hsPosition]
+            if (!h) return
+
+            //console.log({t: parseFloat(h.style.top), hsOffset, clientHeight, h: h.height, footerHeight})
+
+            return stackFromBottom
+                ? clientHeight - parseFloat(h.style.top) - h.height
+                : parseFloat(h.style.top)
+        }
     }, this.$options.methods)
 }
 
 export default {
-    name: 'Recycler',
-
     props: {
         source: {
             type: Object,
