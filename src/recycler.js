@@ -6,7 +6,7 @@ import {
     findIndex as l_findIndex
 } from 'lodash-es'
 
-import {animate} from '@rucebee/util'
+import {animate, is_iOS} from '@rucebee/util'
 
 const mmin = Math.min,
     mmax = Math.max,
@@ -143,7 +143,7 @@ function beforeCreate() {
         if (!hsTypeCache)
             hsCache[type] = hsTypeCache = []
 
-        if (item.id) {
+        if (item?.id) {
             let index = l_findIndex(hsTypeCache, ['id', item.id])
             if (index < 0)
                 index = l_findIndex(hsTypeCache, ['id', undefined])
@@ -202,7 +202,7 @@ function beforeCreate() {
             //console.log('bind', position, h.source)
         }
 
-        h.id = item.id
+        h.id = item?.id
 
         h.top = 0
         if (!position) h.top += headerHeight
@@ -392,7 +392,7 @@ function beforeCreate() {
         //
         //     hs.push(h = hsPop(hsPosition))
         // } else
-        if (scrolling) {
+        if (scrolling && !keyboard) {
             scrolled = true
 
             if (touching) {
@@ -504,7 +504,7 @@ function beforeCreate() {
             if (!scrolling) {
                 _scrollMax()
 
-                if (Math.abs(scrollTop + hsOffset) >= 1)
+                if (Math.abs(scrollTop + hsOffset) >= 1 && !keyboard)
                     _scroll(scrollTop = -hsOffset)
             } else {
                 hsOffset = -mround(scrollMax * hsOffset / (clientHeight - hsHeight))
@@ -530,7 +530,7 @@ function beforeCreate() {
             // } else
 
             //if (touching || !scrolling) {
-            if (!scrolling) {
+            if (!scrolling && !keyboard) {
                 _scrollMax()
 
                 // scrollRatio = scrollTop / scrollTopMax
@@ -589,7 +589,13 @@ function beforeCreate() {
         // if (stackFromBottom && scrollHeight < clientHeight)
         //     up += clientHeight - scrollHeight
 
-        const scrollOffset = isFixed ? 0 : scrollTop
+        if (keyboard && !isFixed) {
+            console.log(keyboardAnchor.getBoundingClientRect().bottom, clientHeight)
+        }
+
+        const scrollOffset = isFixed ? 0 : (
+            keyboard ? scrollTop + keyboardAnchor.getBoundingClientRect().bottom - clientHeight : scrollTop
+        )
         down = up
 
         let j = 0, fluidCheck = 0
@@ -735,7 +741,11 @@ function beforeCreate() {
         touching = false,
         touchTop,
         touchPosition,
-        touchOffset
+        touchOffset,
+
+        keyboard = false,
+        keyboardAnchor
+
 
     const onResize = () => {
         hsInvalidate(0, itemCount)
@@ -753,15 +763,15 @@ function beforeCreate() {
         const bodyHeight = _bodyHeight()
         footerHeight = bodyHeight - headerHeight - el.offsetHeight
 
-        // console.log('resize', {
-        //     clientHeight,
-        //     clientHeightEx,
-        //     scrollTopMax,
-        //     headerHeight,
-        //     bodyHeight,
-        //     elHeight: el.offsetHeight,
-        //     footerHeight
-        // })
+        console.log('resize', {
+            clientHeight,
+            clientHeightEx,
+            scrollMax,
+            headerHeight,
+            bodyHeight,
+            elHeight: el.offsetHeight,
+            footerHeight
+        })
 
         update()
     }, onScroll = ev => {
@@ -832,7 +842,6 @@ function beforeCreate() {
             return
         }
 
-
         touchTop = doc.scrollTop
         touchPosition = hsPosition
         touchOffset = hsOffset
@@ -850,6 +859,21 @@ function beforeCreate() {
 
             update()
         }
+    }, onKeyboardFocus = ev => {
+        //console.log('onKeyboardFocus', ev.target.nodeName, document.activeElement?.nodeName)//, keyboardAnchor, keyboardAnchor.getBoundingClientRect())
+
+        keyboard = true
+        update()
+    }, onKeyboardFocusOut = ev => {
+        //console.log('onKeyboardFocusOut', ev.target.nodeName, document.activeElement?.nodeName)
+
+        keyboard = false
+        update()
+    }, onKeyboardBlur = ev => {
+        //console.log('onKeyboardBlur', ev.target.nodeName, document.activeElement?.nodeName)
+
+        keyboard = false
+        update()
     }
 
     function created() {
@@ -888,6 +912,18 @@ function beforeCreate() {
         win.addEventListener('mousedown', onScrollContinue, true)
 
         win.addEventListener('touchstart', onTouchStart, true)
+
+        if (is_iOS()) {
+            addEventListener('focus', onKeyboardFocus, true)
+            addEventListener('focusout', onKeyboardFocusOut, true)
+            addEventListener('blur', onKeyboardBlur, true)
+
+            keyboardAnchor = document.createElement('div')
+            keyboardAnchor.style.position = 'fixed'
+            keyboardAnchor.style.bottom = 0
+            keyboardAnchor.style.height = '1px'
+            document.body.append(keyboardAnchor)
+        }
 
         onResize()
         //onScrollContinue()
@@ -964,6 +1000,12 @@ function beforeCreate() {
         win.removeEventListener('wheel', onScrollContinue, true)
         win.removeEventListener('mousedown', onScrollContinue, true)
         win.removeEventListener('mousemove', onScrollContinue, true)
+
+        removeEventListener('focus', onKeyboardFocus, true)
+        removeEventListener('focusout', onKeyboardFocusOut, true)
+        removeEventListener('blur', onKeyboardBlur, true)
+
+        if (keyboardAnchor) keyboardAnchor.remove()
 
         scrolling = false
         onScrollEnd()
