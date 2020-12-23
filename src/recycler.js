@@ -5,6 +5,7 @@ import {
     find as l_find,
     findIndex as l_findIndex
 } from 'lodash-es'
+
 import {animate} from '@rucebee/util'
 
 const mmin = Math.min,
@@ -102,7 +103,6 @@ function beforeCreate() {
         scrollTop,
         scrollMax,
         scrollRatio,
-        scrollGap = 999,
         maxOffset,
 
         scrollTime = 0
@@ -123,6 +123,7 @@ function beforeCreate() {
             updateFrame()
         }
 
+
     function hsPop(position) {
         let h
 
@@ -136,8 +137,6 @@ function beforeCreate() {
         }
 
         let item = _getItem(position),
-            //itemBuilder = _itemBuilder(position),
-            //type = itemBuilder.type,
             type = item?.type || 'default',
             hsTypeCache = hsCache[type]
 
@@ -205,7 +204,7 @@ function beforeCreate() {
 
         h.id = item.id
 
-        h.top = 0//_itemTop(position)
+        h.top = 0
         if (!position) h.top += headerHeight
 
         if (h.maxHeight > 0) {
@@ -325,7 +324,7 @@ function beforeCreate() {
                     ? (hsHeight - fluidHeight) * itemCount / (hs.length - fluidCount) + fluidHeight
                     : 2 * clientHeight
                 )
-        ))// + 2 * scrollGap
+        ))
 
         //console.log({height, scrollHeight, clientHeight})
 
@@ -333,7 +332,10 @@ function beforeCreate() {
             scrollHeight = height
 
             wrapper.style.height = (scrollHeight - headerHeight - footerHeight) + 'px'
-            container.style.height = (scrollHeight - footerHeight) + 'px'
+            if (isFixed)
+                container.style.width = wrapper.offsetWidth + 'px'
+            else
+                container.style.height = (scrollHeight - footerHeight) + 'px'
 
             // clientHeight = _clientHeight()
             // clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
@@ -357,7 +359,7 @@ function beforeCreate() {
         if (!itemCount) {
             hsFlush()
 
-            if (!scrolling)
+            if (!scrolling && !touching)
                 vm.$emit('laidout', 0, hs)
 
             win.dispatchEvent(scrolledEvent = new Event('scroll'))
@@ -382,9 +384,6 @@ function beforeCreate() {
         maxOffset = clientHeight - lastHeight
 
         scrollTop = win.scrollY
-
-        //console.log({position, offset, hsPosition, hsOffset, itemCount})
-        //console.log({scrollTop, scrolling, touching})
 
         // if (touching) {
         //     hsOffset -= scrollTop - touchTop
@@ -412,7 +411,7 @@ function beforeCreate() {
                 //console.log('scrolling', {scrollRatio, hsPosition, hsOffset})
             }
 
-            //console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop})
+            //console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop, touching})
         } else if (stackFromBottom) {
             if (position > maxPosition) {
                 hsPosition = maxPosition
@@ -738,7 +737,6 @@ function beforeCreate() {
         touchPosition,
         touchOffset
 
-
     const onResize = () => {
         hsInvalidate(0, itemCount)
 
@@ -834,23 +832,24 @@ function beforeCreate() {
             return
         }
 
-        win.addEventListener('touchend', onTouchEnd)
 
         touchTop = doc.scrollTop
         touchPosition = hsPosition
         touchOffset = hsOffset
 
+        //win.addEventListener('touchend', onTouchEnd)
+        // just detect touching
         touching = true
     }, onTouchEnd = ev => {
         //console.log('onTouchEnd', ev?.type)
 
         win.removeEventListener('touchend', onTouchEnd)
 
-        // if (touching) {
-        //     touching = false
-        //
-        //     update()
-        // }
+        if (touching) {
+            touching = false
+
+            update()
+        }
     }
 
     function created() {
@@ -869,7 +868,7 @@ function beforeCreate() {
         el = this.$el
         win = el.closest('.recycler-window') ?? window
         isWindow = win === window
-        isFixed = false //isWindow
+        isFixed = false//isWindow
         doc = isWindow ? document.documentElement : win
 
         wrapper = el.children[0]
@@ -877,7 +876,6 @@ function beforeCreate() {
 
         if (isFixed) {
             container.style.position = 'fixed'
-            //container.style.overflow = 'hidden !important'
             container.style.top = 0
             //container.style.left = 0
             //container.style.right = 0
