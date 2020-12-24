@@ -1,5 +1,5 @@
 import {findIndex as l_findIndex, findLast as l_findLast, noop} from 'lodash-es'
-import {timeout} from '@rucebee/util'
+import {timeout} from '@rucebee/utils'
 
 export function AbstractSource() {
     const list = []

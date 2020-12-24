@@ -6,7 +6,7 @@ import {
     findIndex as l_findIndex
 } from 'lodash-es'
 
-import {animate, is_iOS} from '@rucebee/util'
+import {animate, is_iOS} from '@rucebee/utils'
 
 const mmin = Math.min,
     mmax = Math.max,
@@ -25,6 +25,7 @@ function beforeCreate() {
         _itemCount,
         _getItem,
         stackFromBottom,
+        stickToTop,
         emptySlot
 
     const vm = this,
@@ -39,7 +40,7 @@ function beforeCreate() {
         _scroll = top => {
             win.scrollTo(doc.scrollLeft, top)
             scrollTime = timeStamp()
-            //console.log('_scroll', top, scrollTime)
+            console.log('_scroll', top, scrollTime)
         },
 
         _bodyHeight = () => {
@@ -209,14 +210,14 @@ function beforeCreate() {
 
         if (h.maxHeight > 0) {
             h.height = mmax(h.minHeight, h.maxHeight * clientHeight)
-                + h.top + (position == maxPosition ? footerHeight : 0)
+                + h.top + (position === maxPosition ? footerHeight : 0)
 
             //Doing it later:
             //h.style.height = h.height + 'px'
         } else {
             h.height = h.$el.offsetHeight + h.top
 
-            if (position == maxPosition)
+            if (position === maxPosition)
                 h.height += footerHeight
         }
 
@@ -318,7 +319,7 @@ function beforeCreate() {
             }
 
         let height = mround(mmin(9 * clientHeight,
-            itemCount == fluidCount
+            itemCount === fluidCount
                 ? fluidHeight
                 : (hs.length > fluidCount
                     ? (hsHeight - fluidHeight) * itemCount / (hs.length - fluidCount) + fluidHeight
@@ -328,14 +329,14 @@ function beforeCreate() {
 
         //console.log({height, scrollHeight, clientHeight})
 
-        if (scrollHeight != height) {
+        if (scrollHeight !== height) {
             scrollHeight = height
 
             wrapper.style.height = (scrollHeight - headerHeight - footerHeight) + 'px'
             if (isFixed)
                 container.style.width = wrapper.offsetWidth + 'px'
             else
-                container.style.height = (scrollHeight - footerHeight) + 'px'
+                container.style.height = (mmax(scrollHeight, clientHeight) - footerHeight) + 'px'
 
             // clientHeight = _clientHeight()
             // clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
@@ -345,7 +346,7 @@ function beforeCreate() {
             //     scrollHeight,
             //     _scrollHeight: doc.scrollHeight,
             //     clientHeight,
-            //     scrollMax
+            //     scrollMax,
             // })
         }
     }
@@ -385,13 +386,6 @@ function beforeCreate() {
 
         scrollTop = doc.scrollTop
 
-        // if (touching) {
-        //     hsOffset -= scrollTop - touchTop
-        //
-        //     touchTop = scrollTop
-        //
-        //     hs.push(h = hsPop(hsPosition))
-        // } else
         if (scrolling && !keyboard) {
             scrolled = true
 
@@ -409,28 +403,20 @@ function beforeCreate() {
                 hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
             }
 
-            //console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop, touching})
+            console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop, touching})
         } else if (stackFromBottom) {
-            console.log('-1> stackFromBottom', {hsPosition, hsOffset, position, offset})
-
             if (position > maxPosition) {
                 hsPosition = maxPosition
                 hs.push(h = hsPop(hsPosition))
-
-                //hsOffset = -footerHeight
             } else {
-                hsPosition = position > -1 ? position : maxPosition
+                hsPosition = position < 0 ? (stickToTop ? 0 : maxPosition) : position
                 hs.push(h = hsPop(hsPosition))
 
                 hsOffset = clientHeight - offset - h.height
-                // if (hsPosition !== maxPosition)
-                //     hsOffset -= footerHeight
             }
 
-            console.log('-2> stackFromBottom', {hsPosition, hsOffset, position, offset})
+            console.log('-> stackFromBottom', {hsPosition, hsOffset, position, offset})
         } else {
-            //console.log('-1>', {hsPosition, hsOffset, position, offset})
-
             if (position > maxPosition) {
                 hsPosition = maxPosition
                 hs.push(h = hsPop(hsPosition))
@@ -443,7 +429,7 @@ function beforeCreate() {
                 hsOffset = offset
             }
 
-            //console.log('-2>', {hsPosition, hsOffset, position, offset})
+            //console.log('->', {hsPosition, hsOffset, position, offset})
         }
 
         up = hsOffset
@@ -480,7 +466,7 @@ function beforeCreate() {
             hsOffset = up
         }
 
-        allShown = hs.length == itemCount && hsHeight < clientHeightEx + 1
+        allShown = hs.length === itemCount && hsHeight < clientHeightEx + 1
 
         if (!scrolling) {
             if (stackFromBottom) {
@@ -506,13 +492,21 @@ function beforeCreate() {
             if (!scrolling) {
                 _scrollMax()
 
-                if (Math.abs(scrollTop + hsOffset) >= 1 && !keyboard)
-                    _scroll(scrollTop = -hsOffset)
+                if (stackFromBottom) {
+                    //TODO
+                } else {
+                    if (Math.abs(scrollTop + hsOffset) >= 1 && !keyboard)
+                        _scroll(scrollTop = -hsOffset)
+                }
             } else {
                 hsOffset = -mround(scrollMax * hsOffset / (clientHeight - hsHeight))
             }
 
-            up = -scrollTop
+            if (stackFromBottom) {
+                //TODO
+            } else {
+                up = -scrollTop
+            }
         } else {
             // if (bottomSpace > 0) {
             //     up += bottomSpace
@@ -609,16 +603,16 @@ function beforeCreate() {
             if (h.maxHeight) {
                 let top = down, height = h.height - h.top
 
-                if (hsPosition + j == maxPosition)
+                if (hsPosition + j === maxPosition)
                     height -= footerHeight
 
                 if (!allShown) {
-                    if (j == 0 && down + h.top < 0) {
+                    if (j === 0 && down + h.top < 0) {
                         top = down + mmin(height - h.minHeight, -down - h.top)
                         height -= top - down
                     }
 
-                    if (j == hs.length - 1 && down + height > clientHeight)
+                    if (j === hs.length - 1 && down + height > clientHeight)
                         height = mmax(h.minHeight, clientHeight - down)
                 }
 
@@ -666,21 +660,9 @@ function beforeCreate() {
                         offset += hs[i].height
                     } else break
                 }
+            } else if (fluidCheck === 2) {
+                position = -1
             }
-            // else if (fluidCheck === 2) while (1) {
-            //     position--
-            //
-            //     if (position > -1) {
-            //         h = hsPop(position)
-            //         offset += h.height
-            //         hsPush(h)
-            //
-            //         if (!h.maxHeight) break
-            //     } else {
-            //         position = 0
-            //         break
-            //     }
-            // }
 
             //console.log('<- stackFromBottom', {hsPosition, hsOffset, position, offset, maxPosition})
         } else {
@@ -694,21 +676,9 @@ function beforeCreate() {
                         offset += h.height
                     } else break
                 }
+            } else if (fluidCheck === 2) {
+                position = -1
             }
-            // else if (fluidCheck === 2) while (1) {
-            //     position--
-            //
-            //     if (position > -1) {
-            //         h = hsPop(position)
-            //         offset -= h.height
-            //         hsPush(h)
-            //
-            //         if (!h.maxHeight) break
-            //     } else {
-            //         position = 0
-            //         break
-            //     }
-            // }
 
             //console.log('<-', {hsPosition, hsOffset, position, offset, maxPosition})
         }
@@ -761,12 +731,12 @@ function beforeCreate() {
 
         update()
     }, onScroll = ev => {
-        if (scrolledEvent == ev) {
+        if (scrolledEvent === ev) {
             scrolledEvent = null
             return
         }
 
-        //console.log('onScroll', ev.type, ev.timeStamp, scrollTime, scrollStarted)
+        console.log('onScroll', ev.type, ev.timeStamp, scrollTime, scrollStarted)
 
         ev.cancelBubble = true
 
@@ -784,7 +754,7 @@ function beforeCreate() {
         if (!scrollStarted)
             scrollStarted = 1
 
-        if (scrollStarted > 0 && ev && (ev.type == 'mousedown' || ev.type == 'touchstart')) {
+        if (scrollStarted > 0 && ev && (ev.type === 'mousedown' || ev.type === 'touchstart')) {
             scrollStarted = -1
 
             //win.addEventListener('mousemove', onScrollContinue)
@@ -818,7 +788,7 @@ function beforeCreate() {
 
             //console.log('onScrollEnd', ev, scrollTop, scrollMax)
 
-            if(touching) {
+            if (touching) {
                 if (scrollTop <= 0)
                     this.position(0)
                 else if (scrollTop >= scrollMax)
@@ -878,6 +848,7 @@ function beforeCreate() {
         _getItem = source.getItem
 
         stackFromBottom = this.stackFromBottom
+        stickToTop = this.stickToTop
 
         itemCount = _itemCount()
         maxPosition = itemCount - 1
@@ -1038,11 +1009,18 @@ function beforeCreate() {
 
             this.onDatasetChanged()
         },
+
         stackFromBottom(newValue) {
             stackFromBottom = newValue
 
             this.onDatasetChanged()
-        }
+        },
+
+        stickToTop(newValue) {
+            stickToTop = newValue
+
+            this.onDatasetChanged()
+        },
 
     }, this.$options.watch)
 
@@ -1060,13 +1038,23 @@ function beforeCreate() {
         },
 
         onInsert(_position, count) {
-            console.log('insert', {hsPosition, position, _position, count, hsOffset, offset})
+            console.log('insert', {hsPosition, position, _position, count, hsOffset, offset, maxPosition})
 
-            if (stackFromBottom && position === maxPosition && offset > footerHeight - lastHeight / 2) {
-                if (_position <= maxPosition && hs.length > maxPosition && hs[maxPosition].maxHeight) {
+            if (position === -1) {
+                if (stackFromBottom && !stickToTop) {
                     position = maxPosition + count - 1
-                    offset += footerHeight
+                    offset = footerHeight
+                } else {
+                    position = 0
+                    offset = 0
                 }
+            } else if (stackFromBottom
+                && _position >= maxPosition
+                && position === maxPosition
+                && offset > footerHeight - lastHeight / 2) {
+
+                position = maxPosition + count - 1
+                offset = footerHeight
             } else {
                 if (_position <= position) position += count
             }
@@ -1111,7 +1099,7 @@ function beforeCreate() {
 
             position = _position < 0 ? itemCount + _position : _position ?? 0
             offset = stackFromBottom
-                ? _offset === undefined ? (position != maxPosition ? footerHeight : 0) : _offset
+                ? _offset === undefined ? (position !== maxPosition ? footerHeight : 0) : _offset
                 //? _offset || 0
                 : _offset === undefined ? (position ? headerHeight : 0) : _offset
 
@@ -1171,7 +1159,8 @@ export default {
             type: Object,
             required: true
         },
-        stackFromBottom: Boolean
+        stackFromBottom: Boolean,
+        stickToTop: Boolean,
     },
 
     // watch: {
@@ -1183,16 +1172,17 @@ export default {
     render(h) {
         return h('div', {
                 attrs: {
-                    class: 'recycler'
+                    class: 'recycler',
                 }
             }, [h('div', {
                 attrs: {
-                    style: 'position:relative;'
+                    style: 'position:relative;',
                 }
             }, [h('div', {
                 attrs: {
                     class: 'recycler-items',
-                    style: 'position:relative;overflow:hidden;'
+                    style: 'position:relative;overflow:hidden;',
+                    //style: 'position:relative;',
                 }
             })])]
         )
