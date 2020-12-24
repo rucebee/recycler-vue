@@ -1,8 +1,6 @@
 import {
     defaults as l_defaults,
-    extend as l_extend,
     mergeWith as l_mergeWith,
-    find as l_find,
     findIndex as l_findIndex
 } from 'lodash-es'
 
@@ -40,7 +38,7 @@ function beforeCreate() {
         _scroll = top => {
             win.scrollTo(doc.scrollLeft, top)
             scrollTime = timeStamp()
-            console.log('_scroll', top, scrollTime)
+            //console.log('_scroll', top, scrollTime)
         },
 
         _bodyHeight = () => {
@@ -123,7 +121,6 @@ function beforeCreate() {
             updateCancel()
             updateFrame()
         }
-
 
     function hsPop(position) {
         let h
@@ -403,7 +400,7 @@ function beforeCreate() {
                 hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
             }
 
-            console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop, touching})
+            //console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop, touching})
         } else if (stackFromBottom) {
             if (position > maxPosition) {
                 hsPosition = maxPosition
@@ -415,7 +412,7 @@ function beforeCreate() {
                 hsOffset = clientHeight - offset - h.height
             }
 
-            console.log('-> stackFromBottom', {hsPosition, hsOffset, position, offset})
+            //console.log('-> stackFromBottom', {hsPosition, hsOffset, position, offset})
         } else {
             if (position > maxPosition) {
                 hsPosition = maxPosition
@@ -492,40 +489,18 @@ function beforeCreate() {
             if (!scrolling) {
                 _scrollMax()
 
-                if (stackFromBottom) {
-                    //TODO
-                } else {
-                    if (Math.abs(scrollTop + hsOffset) >= 1 && !keyboard)
+                if ((!stackFromBottom || stickToTop) && !keyboard) {
+                    if (Math.abs(scrollTop + hsOffset) >= 1)
                         _scroll(scrollTop = -hsOffset)
                 }
             } else {
                 hsOffset = -mround(scrollMax * hsOffset / (clientHeight - hsHeight))
             }
 
-            if (stackFromBottom) {
-                //TODO
-            } else {
+            if ((!stackFromBottom || stickToTop) && !keyboard) {
                 up = -scrollTop
             }
         } else {
-            // if (bottomSpace > 0) {
-            //     up += bottomSpace
-            //     hsOffset = up
-            // }
-
-            // if (hsPosition == 0 && hsOffset > 0) {
-            //     hsOffset = 0
-            //     up = 0
-            //
-            //     if (touching || !scrolling) {
-            //         _scrollMax()
-            //
-            //         _scroll(touchTop = scrollTop = 0)
-            //         scrollRatio = 0
-            //     }
-            // } else
-
-            //if (touching || !scrolling) {
             if (!scrolling && !keyboard) {
                 _scrollMax()
 
@@ -719,15 +694,15 @@ function beforeCreate() {
         const bodyHeight = _bodyHeight()
         footerHeight = bodyHeight - headerHeight - el.offsetHeight
 
-        console.log('resize', {
-            clientHeight,
-            clientHeightEx,
-            scrollMax,
-            headerHeight,
-            bodyHeight,
-            elHeight: el.offsetHeight,
-            footerHeight
-        })
+        // console.log('resize', {
+        //     clientHeight,
+        //     clientHeightEx,
+        //     scrollMax,
+        //     headerHeight,
+        //     bodyHeight,
+        //     elHeight: el.offsetHeight,
+        //     footerHeight
+        // })
 
         update()
     }, onScroll = ev => {
@@ -736,7 +711,7 @@ function beforeCreate() {
             return
         }
 
-        console.log('onScroll', ev.type, ev.timeStamp, scrollTime, scrollStarted)
+        //console.log('onScroll', ev.type, ev.timeStamp, scrollTime, scrollStarted)
 
         ev.cancelBubble = true
 
@@ -1038,7 +1013,7 @@ function beforeCreate() {
         },
 
         onInsert(_position, count) {
-            console.log('insert', {hsPosition, position, _position, count, hsOffset, offset, maxPosition})
+            //console.log('insert', {hsPosition, position, _position, count, hsOffset, offset, maxPosition})
 
             if (position === -1) {
                 if (stackFromBottom && !stickToTop) {
@@ -1182,7 +1157,6 @@ export default {
                 attrs: {
                     class: 'recycler-items',
                     style: 'position:relative;overflow:hidden;',
-                    //style: 'position:relative;',
                 }
             })])]
         )
