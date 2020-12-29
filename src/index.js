@@ -1,4 +1,4 @@
-import Recycler from 'babel-loader!./recycler'
+import Recycler from './recycler'
 
 // export default function install(Vue, options = {}) {
 //     const component = Recycler()
@@ -7,7 +7,7 @@ import Recycler from 'babel-loader!./recycler'
 // }
 
 export {Recycler}
-export * from 'babel-loader!./data-sources'
+export * from './data-sources'
 
 // if (typeof window !== 'undefined' && window.Vue) {
 //     window.Vue.use(install)

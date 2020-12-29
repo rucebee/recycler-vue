@@ -1,18 +1,18 @@
 <template>
     <div class="container">
-        <Recycler :source="dataSource" @laidout="onLaidout">
-            <NumberView/>
+        <recycler :source="dataSource" @laidout="onLaidout">
+            <number-view/>
 
             <template v-slot:loading>
-                <LoadingView/>
+                <loading-view/>
             </template>
-        </Recycler>
+        </recycler>
     </div>
 </template>
 
 <script>
-    import Recycler from '../src'
-    import {WaterfallSource} from '../src'
+    import {Recycler} from '../../src'
+    import {WaterfallSource} from '../../src'
 
     function queryNumbers(item, limit) {
         return new Promise(resolve => {
@@ -27,35 +27,34 @@
     }
 
     const dataSource = new WaterfallSource(queryNumbers, 20, {type: 'loading'}),
+
         LoadingView = {
-            name: 'LoadingView',
             template: '<div style="display:flex;align-items:center;background:#999;max-height:100%;"><p style="text-align:center;font-size:4em;width:100%">Loading...</p></div>'
         },
         NumberView = {
-            name: 'NumberView',
             //template: '<p v-html="item.text"></p>',
             template: '<p><span :style="{fontSize: (0 || item.size) + \'em\'}">{{position}} - {{item.id}}</span></p>'
         }
 
     export default {
-        name: 'App',
         components: {
             Recycler, NumberView, LoadingView
         },
+
         data() {
             return {
-				dataSource
-			}
+                dataSource
+            }
         },
+
         methods: {
             onLaidout(position, hs, interacting) {
                 //console.log(position, position + hs.length, time)
-
-               dataSource.onRange(position, position + hs.length - 1)
             }
         },
+
         mounted() {
-             window.dataSource = dataSource
+            window.dataSource = dataSource
         }
     }
 </script>

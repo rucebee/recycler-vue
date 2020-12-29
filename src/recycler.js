@@ -1,7 +1,7 @@
 import {
-    defaults as l_defaults,
-    mergeWith as l_mergeWith,
-    findIndex as l_findIndex
+    defaults,
+    mergeWith,
+    findIndex
 } from 'lodash-es'
 
 import {animate, is_iOS} from '@rucebee/utils'
@@ -90,6 +90,7 @@ function beforeCreate() {
         allShown = true,
 
         clientHeight,
+        clientHeightOld,
         clientHeightEx,
 
         scrollHeight = 0,
@@ -142,9 +143,9 @@ function beforeCreate() {
             hsCache[type] = hsTypeCache = []
 
         if (item?.id) {
-            let index = l_findIndex(hsTypeCache, ['id', item.id])
+            let index = findIndex(hsTypeCache, ['id', item.id])
             if (index < 0)
-                index = l_findIndex(hsTypeCache, ['id', undefined])
+                index = findIndex(hsTypeCache, ['id', undefined])
 
             if (index > -1) {
                 h = hsTypeCache[index]
@@ -341,7 +342,7 @@ function beforeCreate() {
 
             // console.log('scrollMax', {
             //     scrollHeight,
-            //     _scrollHeight: doc.scrollHeight,
+            //     doc_scrollHeight: doc.scrollHeight,
             //     clientHeight,
             //     scrollMax,
             // })
@@ -384,7 +385,7 @@ function beforeCreate() {
         scrollTop = doc.scrollTop
 
         if (scrolling && !keyboard) {
-            scrolled = true
+            scrolled = Date.now()
 
             if (touching) {
                 hs.push(h = hsPop(hsPosition = touchPosition))
@@ -400,30 +401,30 @@ function beforeCreate() {
                 hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
             }
 
-            //console.log('scrolling', {hsPosition, hsOffset, scrollTop, touchTop, touching})
-        } else if (stackFromBottom) {
-            if (position > maxPosition) {
-                hsPosition = maxPosition
-                hs.push(h = hsPop(hsPosition))
-            } else {
-                hsPosition = position < 0 ? (stickToTop ? 0 : maxPosition) : position
-                hs.push(h = hsPop(hsPosition))
-
-                hsOffset = clientHeight - offset - h.height
-            }
-
-            //console.log('-> stackFromBottom', {hsPosition, hsOffset, position, offset})
+            //console.log('scrolling', {hsPosition, hsOffset, scrollTop, scrollMax})
         } else {
-            if (position > maxPosition) {
-                hsPosition = maxPosition
-                hs.push(h = hsPop(hsPosition))
+            if (stackFromBottom) {
+                if (position > maxPosition) {
+                    hsPosition = maxPosition
+                    hs.push(h = hsPop(hsPosition))
+                } else {
+                    hsPosition = position < 0 ? (stickToTop ? 0 : maxPosition) : position
+                    hs.push(h = hsPop(hsPosition))
 
-                hsOffset = maxOffset
+                    hsOffset = clientHeight - offset - h.height
+                }
             } else {
-                hsPosition = position > -1 ? position : 0
-                hs.push(h = hsPop(hsPosition))
+                if (position > maxPosition) {
+                    hsPosition = maxPosition
+                    hs.push(h = hsPop(hsPosition))
 
-                hsOffset = offset
+                    hsOffset = maxOffset
+                } else {
+                    hsPosition = position > -1 ? position : 0
+                    hs.push(h = hsPop(hsPosition))
+
+                    hsOffset = offset
+                }
             }
 
             //console.log('->', {hsPosition, hsOffset, position, offset})
@@ -451,6 +452,7 @@ function beforeCreate() {
         }
 
         const bottomSpace = clientHeight - down
+        //if (!scrolling && !scrolled && bottomSpace > 0) {
         if (bottomSpace > 0) {
             i = hsPosition;
             while (i-- > 0 && up > -bottomSpace) {
@@ -465,6 +467,7 @@ function beforeCreate() {
 
         allShown = hs.length === itemCount && hsHeight < clientHeightEx + 1
 
+        //if (!scrolling && !scrolled) {
         if (!scrolling) {
             if (stackFromBottom) {
                 if (bottomSpace > 0) {
@@ -485,23 +488,27 @@ function beforeCreate() {
             }
         }
 
-        if (allShown) {
-            if (!scrolling) {
-                _scrollMax()
+        let clearScrolled = true
 
-                if ((!stackFromBottom || stickToTop) && !keyboard) {
-                    if (Math.abs(scrollTop + hsOffset) >= 1)
-                        _scroll(scrollTop = -hsOffset)
+        if (!keyboard) {
+            if (allShown) {
+                if (!scrolling) {
+                    _scrollMax()
+
+                    if (!stackFromBottom || stickToTop) {
+                        if (Math.abs(scrollTop + hsOffset) >= 1)
+                            _scroll(scrollTop = -hsOffset)
+                    }
+                } else {
+                    hsOffset = -mround(scrollMax * hsOffset / (clientHeight - hsHeight))
                 }
-            } else {
-                hsOffset = -mround(scrollMax * hsOffset / (clientHeight - hsHeight))
-            }
 
-            if ((!stackFromBottom || stickToTop) && !keyboard) {
-                up = -scrollTop
-            }
-        } else {
-            if (!scrolling && !keyboard) {
+                if (!stackFromBottom || stickToTop) {
+                    up = -scrollTop
+                }
+            } else if (!scrolling) {
+                const scrollClue = scrollTop < .5 ? -1 : (scrollTop + .5 > scrollMax ? 1 : 0)
+
                 _scrollMax()
 
                 // scrollRatio = scrollTop / scrollTopMax
@@ -549,13 +556,60 @@ function beforeCreate() {
 
                 //console.log(stat)
 
-                if (Math.abs(scrollTop - newScrollTop) >= 1) {
+                if (scrolled && touching) {
+                    let scrollDelta = 0
+
+                    //console.log({scrollClue, scrollTop, scrollMax,})
+
+                    if (scrollClue < 0) {
+                        scrollDelta = !hsPosition ? hsOffset : -newScrollTop
+
+                        //console.log({scrollDelta,})
+
+                        _scroll(scrollTop = newScrollTop = 0)
+                    } else if (scrollClue > 0) {
+                        const hsOffsetOld = hsOffset
+                        hsOffset -= clientHeight - clientHeightOld
+                        scrollDelta = hsPosition + hs.length - 1 === maxPosition ? hsOffset - (clientHeight - hsHeight) : scrollMax - newScrollTop
+
+                        //console.log({scrollDelta, delta: clientHeight - clientHeightOld, hsOffset, hsOffsetOld,})
+
+                        _scroll(scrollTop = newScrollTop = scrollMax)
+                    }
+
+                    if (mabs(scrollDelta) >= 1) {
+                        clearScrolled = false
+
+                        const r = mmax(0, mmin(1, (Date.now() - scrolled) / 2000)),
+                            hsOffsetOld = hsOffset
+                        hsOffset -= r * scrollDelta
+
+                        console.log({r, hsOffsetOld, hsOffset,})
+
+                        update()
+                    } else {
+                        if (scrollClue < 0) {
+                            if (!hsPosition) {
+                                hsOffset = 0
+                            }
+                        } else if (scrollClue > 0) {
+                            if (hsPosition + hs.length - 1 === maxPosition) {
+                                hsOffset = clientHeight - hsHeight
+                            }
+                        }
+                    }
+                }
+
+                if (mabs(scrollTop - newScrollTop) >= 1) {
                     //console.log('adjustScroll', {scrollTop, newScrollTop})
 
-                    _scroll(touchTop = scrollTop = newScrollTop)
+                    _scroll(scrollTop = newScrollTop)
                 }
             }
         }
+
+        if (!scrolling)
+            clientHeightOld = clientHeight
 
         // console.log(keyboardAnchor.getBoundingClientRect().bottom, clientHeight)
 
@@ -614,8 +668,6 @@ function beforeCreate() {
         }
 
         if (scrolling && touching) {
-            //console.log('fixed', {hsPosition, hsOffset})
-
             touchPosition = hsPosition
             touchOffset = hsOffset
             touchTop = scrollTop
@@ -626,7 +678,7 @@ function beforeCreate() {
         if (stackFromBottom) {
             // position = maxPosition - hsPosition - hs.length + 1
             position = hsPosition + hs.length - 1
-            offset = clientHeight - hsOffset - down + up
+            offset = clientHeight - hsHeight - hsOffset
 
             if (fluidCheck === 3) {
                 for (i = hs.length - 1; i >= 0; i--) {
@@ -638,8 +690,6 @@ function beforeCreate() {
             } else if (fluidCheck === 2) {
                 position = -1
             }
-
-            //console.log('<- stackFromBottom', {hsPosition, hsOffset, position, offset, maxPosition})
         } else {
             position = hsPosition
             offset = hsOffset
@@ -654,17 +704,20 @@ function beforeCreate() {
             } else if (fluidCheck === 2) {
                 position = -1
             }
-
-            //console.log('<-', {hsPosition, hsOffset, position, offset, maxPosition})
         }
 
-        if (!scrolling)
+        //console.log('<-', {hsPosition, hsOffset, position, offset, maxPosition})
+
+        if (!scrolling && clearScrolled) {
+            scrolled = 0
+
             vm.$emit('laidout', hsPosition, hs)
+        }
 
         win.dispatchEvent(scrolledEvent = new Event('scroll'))
     }
 
-    let scrolled = false,
+    let scrolled = 0,
         scrolling = false,
         scrolledEvent = null,
         scrollStarted = 0,
@@ -674,6 +727,7 @@ function beforeCreate() {
         touchTop,
         touchPosition,
         touchOffset,
+        touchEnd = 0,
 
         keyboard = false,
         keyboardAnchor
@@ -711,7 +765,12 @@ function beforeCreate() {
             return
         }
 
-        //console.log('onScroll', ev.type, ev.timeStamp, scrollTime, scrollStarted)
+        // console.log('onScroll', ev.type, ev.timeStamp, {
+        //     scrollTime,
+        //     scrollStarted,
+        //     scrollTop,
+        //     scrollMax,
+        // })
 
         ev.cancelBubble = true
 
@@ -763,16 +822,7 @@ function beforeCreate() {
 
             //console.log('onScrollEnd', ev, scrollTop, scrollMax)
 
-            if (touching) {
-                if (scrollTop <= 0)
-                    this.position(0)
-                else if (scrollTop >= scrollMax)
-                    this.position(itemCount)
-                else
-                    update()
-            } else {
-                update()
-            }
+            update()
         }
     }, onTouchStart = ev => {
         //console.log('onTouchStart', ev?.type, allShown)
@@ -782,11 +832,12 @@ function beforeCreate() {
             return
         }
 
+        //touchEnd = 0
         touchTop = doc.scrollTop
         touchPosition = hsPosition
         touchOffset = hsOffset
 
-        //win.addEventListener('touchend', onTouchEnd)
+        win.addEventListener('touchend', onTouchEnd)
         // just detect touching
         touching = true
     }, onTouchEnd = ev => {
@@ -794,26 +845,51 @@ function beforeCreate() {
 
         win.removeEventListener('touchend', onTouchEnd)
 
+        // const scrollTop = doc.scrollTop
+        // if (scrollTop < 0) {
+        //     touchEnd = scrollTop
+        // } else if (scrollTop > scrollMax) {
+        //     touchEnd = scrollTop - scrollMax
+        // } else {
+        //     touchEnd = 0
+        // }
+
+        //console.log('onTouchEnd', {touchEnd, scrollTop, scrollMax})
+
         // if (touching) {
         //     touching = false
         //
         //     update()
         // }
     }, onKeyboardFocus = ev => {
-        //console.log('onKeyboardFocus', ev.target.nodeName, document.activeElement?.nodeName)//, keyboardAnchor, keyboardAnchor.getBoundingClientRect())
+        console.log('onKeyboardFocus', ev.target.nodeName, document.activeElement?.nodeName)
+        // , {
+        //     position,
+        //     offset,
+        //     hsPosition,
+        //     hsOffset,
+        // }, keyboardAnchor, keyboardAnchor.getBoundingClientRect())
 
-        keyboard = true
+        keyboard = ev.target.nodeName === document.activeElement?.nodeName
         update()
     }, onKeyboardFocusOut = ev => {
-        //console.log('onKeyboardFocusOut', ev.target.nodeName, document.activeElement?.nodeName)
+        console.log('onKeyboardFocusOut', ev.target.nodeName, document.activeElement?.nodeName)
 
         keyboard = false
         update()
     }, onKeyboardBlur = ev => {
-        //console.log('onKeyboardBlur', ev.target.nodeName, document.activeElement?.nodeName)
+        console.log('onKeyboardBlur', ev.target.nodeName, document.activeElement?.nodeName)
 
         keyboard = false
         update()
+    }, onKeyboardTouch = ev => {
+        const _keyboard = ['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) > -1
+        if (keyboard !== _keyboard) {
+            console.log('onKeyboardTouch', ev.target.nodeName, document.activeElement?.nodeName)
+
+            keyboard = _keyboard
+            update()
+        }
     }
 
     function created() {
@@ -854,12 +930,12 @@ function beforeCreate() {
         win.addEventListener('mousedown', onScrollContinue, true)
 
         win.addEventListener('touchstart', onTouchStart, true)
-        win.addEventListener('touchend', onTouchEnd, true)
 
         if (is_iOS()) {
             addEventListener('focus', onKeyboardFocus, true)
-            addEventListener('focusout', onKeyboardFocusOut, true)
             addEventListener('blur', onKeyboardBlur, true)
+            addEventListener('touchstart', onKeyboardTouch, true)
+            addEventListener('focusout', onKeyboardFocusOut, true)
 
             keyboardAnchor = document.createElement('div')
             keyboardAnchor.style.position = 'fixed'
@@ -869,6 +945,7 @@ function beforeCreate() {
         }
 
         onResize()
+        clientHeightOld = clientHeight
         //onScrollContinue()
         //win.dispatchEvent(new Event('scroll'))
 
@@ -887,14 +964,11 @@ function beforeCreate() {
 
                     options.data = function () {
                         const data = dataFn ? dataFn.call(this) : {}
-                        // data.type = type
-                        // data.source = source
-                        // data.item = null
                         data.position = -1
                         return data
                     }
 
-                    options.computed = l_defaults({
+                    options.computed = defaults({
                         type: () => type,
                         source: () => source,
                         item() {
@@ -945,8 +1019,9 @@ function beforeCreate() {
         win.removeEventListener('mousemove', onScrollContinue, true)
 
         removeEventListener('focus', onKeyboardFocus, true)
-        removeEventListener('focusout', onKeyboardFocusOut, true)
         removeEventListener('blur', onKeyboardBlur, true)
+        removeEventListener('touchstart', onKeyboardTouch, true)
+        removeEventListener('focusout', onKeyboardFocusOut, true)
 
         if (keyboardAnchor) keyboardAnchor.remove()
 
@@ -972,10 +1047,10 @@ function beforeCreate() {
         scrollHeight = 0
     }
 
-    l_mergeWith(this.$options, {created, mounted, beforeDestroy}, (objValue, srcValue) =>
+    mergeWith(this.$options, {created, mounted, beforeDestroy}, (objValue, srcValue) =>
         Array.isArray(objValue) ? objValue.concat([srcValue]) : (objValue ? undefined : [srcValue]))
 
-    this.$options.watch = l_defaults({
+    this.$options.watch = defaults({
         source(newValue) {
             source = newValue
 
@@ -999,7 +1074,7 @@ function beforeCreate() {
 
     }, this.$options.watch)
 
-    this.$options.methods = l_defaults({
+    this.$options.methods = defaults({
         onDatasetChanged() {
             //console.log('update', {hsPosition, position, _position, count})
 
@@ -1013,7 +1088,7 @@ function beforeCreate() {
         },
 
         onInsert(_position, count) {
-            //console.log('insert', {hsPosition, position, _position, count, hsOffset, offset, maxPosition})
+            console.log('insert', {hsPosition, position, _position, count})
 
             if (position === -1) {
                 if (stackFromBottom && !stickToTop) {
@@ -1034,6 +1109,9 @@ function beforeCreate() {
                 if (_position <= position) position += count
             }
 
+            if (touching && _position <= touchPosition)
+                touchPosition += count
+
             for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
                 hs[i].position += count
 
@@ -1041,24 +1119,32 @@ function beforeCreate() {
         },
 
         onRemove(_position, count) {
-            //console.log('remove', {hsPosition, position, _position, count})
+            console.log('remove', {hsPosition, position, _position, count})
 
             const invalid = hsInvalidate(_position, count)
 
-            if (count >= itemCount)
+            if (!_itemCount())
                 position = -1
-            else if (_position < position)
-                position -= mmin(count, position - _position + 1)
+            else {
+                if (_position < position)
+                    position -= mmin(count, position - _position + 1)
+
+                if (touching && _position <= touchPosition)
+                    touchPosition -= mmin(count, touchPosition - _position + 1)
+            }
 
             if (invalid) {
                 for (let i = mmax(0, _position + count - hsPosition); i < hs.length; i++)
                     hs[i].position -= count
 
                 for (let i = mmax(0, _position - hsPosition), len = mmin(hs.length, _position - hsPosition + count); i < len; i++) {
-                    hsPush(hs[i])
-                    hs.splice(i, 1)
+                    const [h] = hs.splice(i, 1)
                     len--
                     i--
+
+                    h.height = 0
+                    hsPush(h)
+                    //h.$el.remove()
                 }
 
                 update()
@@ -1078,7 +1164,7 @@ function beforeCreate() {
                 //? _offset || 0
                 : _offset === undefined ? (position ? headerHeight : 0) : _offset
 
-            console.log('position', {position, offset})
+            //console.log('position', {position, offset})
 
             update()
         },
@@ -1106,11 +1192,11 @@ function beforeCreate() {
                 return
             }
 
-            const _scrollTop = scrolling && touching ? doc.scrollTop : (hsPosition
+            const _scrollTop = (scrolling || scrolled) && touching ? doc.scrollTop : (hsPosition
                 ? firstHeight + (doc.scrollTop - scrollMax / maxPosition) / (scrollMax - scrollMax / maxPosition) * (scrollMax - firstHeight)
                 : -hsOffset)
 
-            //console.log('scrollTop <-', {hsPosition, _scrollTop})
+            //console.log('scrollTop <-', {scrolling, scrolled, _scrollTop})
 
             return _scrollTop
         },

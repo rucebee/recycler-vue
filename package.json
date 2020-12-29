@@ -4,10 +4,12 @@
   "description": "Android RecyclerView port for Vue.js",
   "main": "src/index.js",
   "directories": {
-    "example": "examples"
+    "demo": "demo"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "babel src -d dist",
+    "demo": "webpack-cli serve --config ./demo/webpack.config.js"
   },
   "keywords": [
     "RecyclerView",
@@ -16,16 +18,22 @@
     "list"
   ],
   "devDependencies": {
-    "@babel/core": "^7.9.0",
-    "@babel/preset-env": "^7.9.5",
-    "babel-loader": "^8.1.0",
-    "webpack": "^4.42.1"
+    "@babel/cli": "^7",
+    "@babel/core": "^7",
+    "@babel/preset-env": "^7",
+    "babel-loader": "^8.2.2",
+    "vue": "^2.6.12",
+    "vue-loader": "^15.9.6",
+    "vue-template-compiler": "^2.6.12",
+    "webpack": "^4.44.2",
+    "webpack-cli": "^4.3.0",
+    "webpack-dev-server": "^3.11.0"
   },
   "dependencies": {
-    "lodash-es": ">=4.17.0 <5.0.0"
+    "lodash-es": "^4.17.20"
   },
   "peerDependencies": {
-    "vue": "^2.6.11"
+    "vue": "^2.6.12"
   },
   "author": "rucebee",
   "license": "ISC",
