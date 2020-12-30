@@ -316,7 +316,7 @@ function beforeCreate() {
                 fluidHeight += h.height
             }
 
-        let height = mround(mmin(9 * clientHeight,
+        let height = hs.length === itemCount ? hsHeight : mround(mmin(9 * clientHeight,
             itemCount === fluidCount
                 ? fluidHeight
                 : (hs.length > fluidCount
@@ -411,6 +411,7 @@ function beforeCreate() {
                     hsPosition = position < 0 ? (stickToTop ? 0 : maxPosition) : position
                     hs.push(h = hsPop(hsPosition))
 
+                    //offset = clientHeight - hsHeight - hsOffset
                     hsOffset = clientHeight - offset - h.height
                 }
             } else {
@@ -427,7 +428,7 @@ function beforeCreate() {
                 }
             }
 
-            //console.log('->', {hsPosition, hsOffset, position, offset})
+            //console.log({'-> hsPosition': hsPosition, hsOffset, position, offset, clientHeight})
         }
 
         up = hsOffset
@@ -554,17 +555,41 @@ function beforeCreate() {
                     hOffset += hh
                 }
 
+                const _scrollRatio = mmax(0, mmin(1, scrollMax > 0 ? newScrollTop / scrollMax : 0)),
+                    _positionReal = maxPosition * _scrollRatio,
+                    _hsPosition = mfloor(_positionReal)
+
+                // if (_hsPosition >= hsPosition && _hsPosition < hsPosition + hs.length) {
+                //     const _h = hs[_hsPosition - hsPosition],
+                //         _hsOffset = _scrollRatio * maxOffset - (_positionReal % 1) * _h.height
+                //
+                //     let a = ''
+                //
+                //     if (_hsPosition - 1 >= hsPosition)
+                //         a += (_hsPosition - 1) + ' - ' + (_hsOffset - hs[_hsPosition - hsPosition - 1].height) + ', '
+                //
+                //     a += _hsPosition + ' - ' + _hsOffset + ', '
+                //
+                //     if (_hsPosition + 1 < hsPosition + hs.length)
+                //         a += (_hsPosition + 1) + ' - ' + (_hsOffset + hs[_hsPosition - hsPosition].height) + ', '
+                //
+                //     console.log({hsPosition, hsOffset, a})
+                // } else {
+                //     console.log({hsPosition, _hsPosition, hsOffset})
+                //
+                // }
+
                 //console.log(stat)
 
                 if (scrolled && touching) {
                     let scrollDelta = 0
 
-                    //console.log({scrollClue, scrollTop, scrollMax,})
+                    //console.log({scrollClue, scrollTop, scrollMax})
 
                     if (scrollClue < 0) {
                         scrollDelta = !hsPosition ? hsOffset : -newScrollTop
 
-                        //console.log({scrollDelta,})
+                        console.log({scrollDelta})
 
                         _scroll(scrollTop = newScrollTop = 0)
                     } else if (scrollClue > 0) {
@@ -572,7 +597,7 @@ function beforeCreate() {
                         hsOffset -= clientHeight - clientHeightOld
                         scrollDelta = hsPosition + hs.length - 1 === maxPosition ? hsOffset - (clientHeight - hsHeight) : scrollMax - newScrollTop
 
-                        //console.log({scrollDelta, delta: clientHeight - clientHeightOld, hsOffset, hsOffsetOld,})
+                        console.log({scrollDelta, delta: clientHeight - clientHeightOld, hsOffset, hsOffsetOld})
 
                         _scroll(scrollTop = newScrollTop = scrollMax)
                     }
@@ -584,7 +609,7 @@ function beforeCreate() {
                             hsOffsetOld = hsOffset
                         hsOffset -= r * scrollDelta
 
-                        console.log({r, hsOffsetOld, hsOffset,})
+                        console.log({r, hsOffsetOld, hsOffset})
 
                         update()
                     } else {
@@ -601,7 +626,7 @@ function beforeCreate() {
                 }
 
                 if (mabs(scrollTop - newScrollTop) >= 1) {
-                    //console.log('adjustScroll', {scrollTop, newScrollTop})
+                    console.log('adjustScroll', {scrollTop, newScrollTop})
 
                     _scroll(scrollTop = newScrollTop)
                 }
@@ -616,7 +641,7 @@ function beforeCreate() {
         const scrollOffset = (isFixed ? 0 : (
             keyboard ? scrollTop + keyboardAnchor.getBoundingClientRect().bottom - clientHeight : scrollTop
         ))
-        down = up
+        down = up = hsOffset
 
         let j = 0, fluidCheck = 0
         while (j < hs.length) {
@@ -659,6 +684,7 @@ function beforeCreate() {
             if (down < 0) {
                 hsPosition++
                 hsOffset += h.height
+                hsHeight -= h.height
 
                 hs.splice(j, 1)
                 hsPush(h)
@@ -706,7 +732,7 @@ function beforeCreate() {
             }
         }
 
-        //console.log('<-', {hsPosition, hsOffset, position, offset, maxPosition})
+        //console.log({'<- hsPosition': hsPosition, hsOffset, position, offset,})
 
         if (!scrolling && clearScrolled) {
             scrolled = 0
@@ -748,15 +774,15 @@ function beforeCreate() {
         const bodyHeight = _bodyHeight()
         footerHeight = bodyHeight - headerHeight - el.offsetHeight
 
-        // console.log('resize', {
-        //     clientHeight,
-        //     clientHeightEx,
-        //     scrollMax,
-        //     headerHeight,
-        //     bodyHeight,
-        //     elHeight: el.offsetHeight,
-        //     footerHeight
-        // })
+        console.log('resize', {
+            clientHeight,
+            clientHeightEx,
+            scrollMax,
+            headerHeight,
+            bodyHeight,
+            elHeight: el.offsetHeight,
+            footerHeight
+        })
 
         update()
     }, onScroll = ev => {
@@ -765,7 +791,9 @@ function beforeCreate() {
             return
         }
 
-        // console.log('onScroll', ev.type, ev.timeStamp, {
+        // console.log('onScroll', {
+        //     type: ev.type,
+        //     timeStamp: ev.timeStamp,
         //     scrollTime,
         //     scrollStarted,
         //     scrollTop,
@@ -1164,7 +1192,7 @@ function beforeCreate() {
                 //? _offset || 0
                 : _offset === undefined ? (position ? headerHeight : 0) : _offset
 
-            //console.log('position', {position, offset})
+            console.log('position', {position, offset})
 
             update()
         },
