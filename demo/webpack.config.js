@@ -1,14 +1,14 @@
-const {VueLoaderPlugin} = require("vue-loader");
+const {VueLoaderPlugin} = require('vue-loader');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const path = require('path');
 
-module.exports = {
-    mode: "development",
-    entry: __dirname + "/src/index.js",
+const config = {
+    entry: path.join(__dirname, 'src/index.js'),
     output: {
-        path: __dirname + "/dist",
+        path: path.join(__dirname, 'dist'),
     },
-    devtool: "inline-source-map",
     devServer: {
-        contentBase: __dirname + "/dist",
+        contentBase: path.join(__dirname, 'dist'),
         inline: true,
         hot: true,
         port: 8080,
@@ -19,22 +19,33 @@ module.exports = {
                 test: /\.js$/,
                 exclude: /node_modules/,
                 use: {
-                    loader: "babel-loader",
+                    loader: 'babel-loader',
                 },
             },
             {
                 test: /\.vue$/,
-                loader: "vue-loader",
+                loader: 'vue-loader',
             },
         ],
     },
     plugins: [
         new VueLoaderPlugin(),
+        new HtmlWebpackPlugin({
+            template: path.join(__dirname, 'src/index.html'),
+        }),
     ],
     resolve: {
         alias: {
-            vue$: "vue/dist/vue.esm.js",
+            vue$: 'vue/dist/vue.esm.js',
         },
-        extensions: ["*", ".js", ".vue", ".json"],
+        extensions: ['*', '.js', '.vue', '.json'],
     }
 };
+
+module.exports = (env, argv) => {
+    if (argv.mode === 'development') {
+        config.devtool = 'inline-source-map';
+    }
+
+    return config;
+}
