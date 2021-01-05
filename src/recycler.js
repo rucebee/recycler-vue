@@ -713,7 +713,7 @@ function beforeCreate() {
                         offset += hs[i].height
                     } else break
                 }
-            } else if (fluidCheck === 2) {
+            } else if (fluidCheck === 2 && hs.length === itemCount) {
                 position = -1
             }
         } else {
@@ -727,7 +727,7 @@ function beforeCreate() {
                         offset += h.height
                     } else break
                 }
-            } else if (fluidCheck === 2) {
+            } else if (fluidCheck === 2 && hs.length === itemCount) {
                 position = -1
             }
         }
@@ -890,7 +890,7 @@ function beforeCreate() {
         //     update()
         // }
     }, onKeyboardFocus = ev => {
-        console.log('onKeyboardFocus', ev.target.nodeName, document.activeElement?.nodeName)
+        console.log('onKeyboardFocus', ev.target.nodeName, document.activeElement?.nodeNamedoc)
         // , {
         //     position,
         //     offset,
@@ -899,16 +899,19 @@ function beforeCreate() {
         // }, keyboardAnchor, keyboardAnchor.getBoundingClientRect())
 
         keyboard = ev.target.nodeName === document.activeElement?.nodeName
+        doc.style.position = keyboard ? 'fixed' : ''
         update()
     }, onKeyboardFocusOut = ev => {
         console.log('onKeyboardFocusOut', ev.target.nodeName, document.activeElement?.nodeName)
 
         keyboard = false
+        doc.style.position = keyboard ? 'fixed' : ''
         update()
     }, onKeyboardBlur = ev => {
         console.log('onKeyboardBlur', ev.target.nodeName, document.activeElement?.nodeName)
 
         keyboard = false
+        doc.style.position = keyboard ? 'fixed' : ''
         update()
     }, onKeyboardTouch = ev => {
         const _keyboard = ['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) > -1
@@ -916,6 +919,7 @@ function beforeCreate() {
             console.log('onKeyboardTouch', ev.target.nodeName, document.activeElement?.nodeName)
 
             keyboard = _keyboard
+            doc.style.position = keyboard ? 'fixed' : ''
             update()
         }
     }
@@ -1052,6 +1056,10 @@ function beforeCreate() {
         removeEventListener('focusout', onKeyboardFocusOut, true)
 
         if (keyboardAnchor) keyboardAnchor.remove()
+        if (keyboard) {
+            keyboard = false
+            doc.style.position = keyboard ? 'fixed' : ''
+        }
 
         scrolling = false
         onScrollEnd()
@@ -1120,8 +1128,8 @@ function beforeCreate() {
 
             if (position === -1) {
                 if (stackFromBottom && !stickToTop) {
-                    position = maxPosition + count - 1
-                    offset = footerHeight
+                    position = maxPosition + count
+                    offset = 0
                 } else {
                     position = 0
                     offset = 0
@@ -1129,15 +1137,15 @@ function beforeCreate() {
             } else if (stackFromBottom
                 && _position >= maxPosition
                 && position === maxPosition
-                && offset > footerHeight - lastHeight / 2) {
-
-                position = maxPosition + count - 1
-                offset = footerHeight
+                && -offset < (footerHeight + lastHeight) / 2
+            ) {
+                position = maxPosition + count
+                offset = 0
             } else {
-                if (_position <= position) position += count
+                if (_position < position) position += count
             }
 
-            if (touching && _position <= touchPosition)
+            if (touching && _position < touchPosition)
                 touchPosition += count
 
             for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
@@ -1184,13 +1192,17 @@ function beforeCreate() {
 
         position(_position, _offset) {
             if (_position === undefined && _offset === undefined)
-                return [position < 0 ? undefined : position, offset]
+                return [
+                    position < 0 ? undefined : position,
+                    stackFromBottom
+                        ? position !== maxPosition ? offset - footerHeight : offset
+                        : position ? offset - headerHeight : offset
+                ]
 
             position = _position < 0 ? itemCount + _position : _position ?? 0
             offset = stackFromBottom
-                ? _offset === undefined ? (position !== maxPosition ? footerHeight : 0) : _offset
-                //? _offset || 0
-                : _offset === undefined ? (position ? headerHeight : 0) : _offset
+                ? position !== maxPosition ? _offset + footerHeight : _offset
+                : position ? _offset + headerHeight : _offset
 
             console.log('position', {position, offset})
 

@@ -2,7 +2,7 @@
   "name": "@rucebee/recycler-vue",
   "version": "1.0.5",
   "description": "Android RecyclerView port for Vue.js",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "directories": {
     "demo": "demo"
   },
@@ -10,7 +10,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "babel src -d dist",
     "demo": "webpack serve --mode development --config ./demo/webpack.config.js",
-    "demo-build": "webpack --config ./demo/webpack.config.js"
+    "demo-build": "webpack --mode production --config ./demo/webpack.config.js"
   },
   "keywords": [
     "RecyclerView",
