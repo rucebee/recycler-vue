@@ -890,7 +890,7 @@ function beforeCreate() {
         //     update()
         // }
     }, onKeyboardFocus = ev => {
-        console.log('onKeyboardFocus', ev.target.nodeName, document.activeElement?.nodeNamedoc)
+        console.log('onKeyboardFocus', ev.target.nodeName, document.activeElement?.nodeName)
         // , {
         //     position,
         //     offset,
@@ -899,19 +899,19 @@ function beforeCreate() {
         // }, keyboardAnchor, keyboardAnchor.getBoundingClientRect())
 
         keyboard = ev.target.nodeName === document.activeElement?.nodeName
-        doc.style.position = keyboard ? 'fixed' : ''
+        //doc.style.position = keyboard ? 'fixed' : ''
         update()
     }, onKeyboardFocusOut = ev => {
         console.log('onKeyboardFocusOut', ev.target.nodeName, document.activeElement?.nodeName)
 
         keyboard = false
-        doc.style.position = keyboard ? 'fixed' : ''
+        //doc.style.position = keyboard ? 'fixed' : ''
         update()
     }, onKeyboardBlur = ev => {
         console.log('onKeyboardBlur', ev.target.nodeName, document.activeElement?.nodeName)
 
         keyboard = false
-        doc.style.position = keyboard ? 'fixed' : ''
+        //doc.style.position = keyboard ? 'fixed' : ''
         update()
     }, onKeyboardTouch = ev => {
         const _keyboard = ['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) > -1
@@ -919,7 +919,7 @@ function beforeCreate() {
             console.log('onKeyboardTouch', ev.target.nodeName, document.activeElement?.nodeName)
 
             keyboard = _keyboard
-            doc.style.position = keyboard ? 'fixed' : ''
+            //doc.style.position = keyboard ? 'fixed' : ''
             update()
         }
     }
@@ -1058,7 +1058,7 @@ function beforeCreate() {
         if (keyboardAnchor) keyboardAnchor.remove()
         if (keyboard) {
             keyboard = false
-            doc.style.position = keyboard ? 'fixed' : ''
+            //doc.style.position = keyboard ? 'fixed' : ''
         }
 
         scrolling = false
