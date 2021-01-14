@@ -1190,8 +1190,8 @@ function beforeCreate() {
         update: update,
         updateNow: updateNow,
 
-        position(_position, _offset) {
-            if (_position === undefined && _offset === undefined)
+        position(_position, _offset = 0) {
+            if (_position === undefined)
                 return [
                     position < 0 ? undefined : position,
                     stackFromBottom
