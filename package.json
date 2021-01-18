@@ -23,19 +23,19 @@
     "@babel/core": "^7",
     "@babel/preset-env": "^7",
     "babel-loader": "^8.2.2",
-    "html-webpack-plugin": "^4.5.0",
+    "html-webpack-plugin": "^4.5.1",
     "vue": "^2.6.12",
     "vue-loader": "^15.9.6",
     "vue-template-compiler": "^2.6.12",
-    "webpack": "^4.44.2",
-    "webpack-cli": "^4.3.0",
-    "webpack-dev-server": "^3.11.0"
+    "webpack": "^4.46.0",
+    "webpack-cli": "^4.3.1",
+    "webpack-dev-server": "^3.11.2"
   },
   "dependencies": {
-    "@rucebee/util": "^1",
     "lodash-es": "^4.17.20"
   },
   "peerDependencies": {
+    "@rucebee/util": "^1",
     "vue": "^2.6.12"
   },
   "author": "rucebee",
