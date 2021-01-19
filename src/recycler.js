@@ -593,7 +593,6 @@ function beforeCreate() {
                 //     console.log({hsPosition, hsOffset, a})
                 // } else {
                 //     console.log({hsPosition, _hsPosition, hsOffset})
-                //
                 // }
 
                 //console.log(stat)
@@ -667,7 +666,7 @@ function beforeCreate() {
                 continue
             }
 
-            h = hs[j];
+            h = hs[j]
             //h.style.zIndex = j
             //h.style.order = j
 
@@ -720,6 +719,7 @@ function beforeCreate() {
 
         if (stackFromBottom
             && hsPosition + hs.length - 1 === maxPosition
+            && !hs[hs.length - 1].maxHeight
             && (bottomOffset = hsOffset + hsHeight - clientHeight) >= 0
             && bottomOffset < (lastHeight - footerHeight) / 2
         ) {
@@ -803,13 +803,10 @@ function beforeCreate() {
         footerHeight = bodyHeight - headerHeight - el.offsetHeight
 
         console.log('resize', {
-            clientHeight,
-            clientHeightEx,
+            clientHeight, clientHeightEx,
             scrollMax,
-            headerHeight,
-            bodyHeight,
-            elHeight: el.offsetHeight,
-            footerHeight
+            headerHeight, footerHeight, bodyHeight,
+            elHeight: el.offsetHeight
         })
 
         update()
