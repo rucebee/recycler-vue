@@ -62,17 +62,9 @@ export function AbstractSource() {
             return
         }
 
-        let position = recycler.startPosition()
-        const item = this.getItem(position),
-            offset = recycler.offset(position)
-
+        recycler.setStackFromBottom(false)
         fn()
-
-        if (offset) {
-            position = this.indexOf(item)
-            if (position > -1)
-                recycler.position(position, offset)
-        }
+        recycler.setStackFromBottom(true)
     }
 
     this.attach = _recycler => {
