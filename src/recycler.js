@@ -402,7 +402,7 @@ function beforeCreate() {
                 hsOffset = scrollRatio * maxOffset - (positionReal % 1) * h.height
             }
 
-            console.log('scrolling', {hsPosition, hsOffset, scrollTop, scrollMax, touching})
+            // console.log('scrolling', {hsPosition, hsOffset, scrollTop, scrollMax, touching})
         } else {
             if (stackFromBottom) {
                 if (position > maxPosition) {
@@ -445,7 +445,7 @@ function beforeCreate() {
                 }
             }
 
-            console.log({'-> hsPosition': hsPosition, hsOffset, position, offset, clientHeight})
+            // console.log({'-> hsPosition': hsPosition, hsOffset, position, offset, clientHeight})
         }
 
         up = hsOffset
@@ -759,13 +759,13 @@ function beforeCreate() {
             position = -1
         }
 
-        console.log({
-            '<- hsPosition': hsPosition,
-            hsOffset,
-            position,
-            offset,
-            clientHeight,
-        })
+        // console.log({
+        //     '<- hsPosition': hsPosition,
+        //     hsOffset,
+        //     position,
+        //     offset,
+        //     clientHeight,
+        // })
 
         if (!scrolling && clearScrolled) {
             scrolled = 0
@@ -962,6 +962,7 @@ function beforeCreate() {
         _getItem = source.getItem
 
         stackFromBottom = this.stackFromBottom
+
         stickToTop = this.stickToTop
 
         itemCount = _itemCount()
@@ -1156,7 +1157,7 @@ function beforeCreate() {
         },
 
         onInsert(_position, count) {
-            console.log('insert', {hsPosition, position, _position, count})
+            console.log('insert', {hsPosition, position, _position, count, offset, stackFromBottom})
 
             if (position === -1) {
                 if (stackFromBottom && !stickToTop) {
@@ -1185,10 +1186,12 @@ function beforeCreate() {
                 hs[i].position += count
 
             if (hsInvalidate(_position, count)) update()
+
+            console.log('inserted', {hsPosition, position, _position, count, offset, stackFromBottom})
         },
 
         onRemove(_position, count) {
-            console.log('remove', {hsPosition, position, _position, count})
+            console.log('remove', {hsPosition, position, _position, count, offset, stackFromBottom})
 
             const invalid = hsInvalidate(_position, count)
 
@@ -1206,27 +1209,30 @@ function beforeCreate() {
                 for (let i = mmax(0, _position + count - hsPosition); i < hs.length; i++)
                     hs[i].position -= count
 
-                for (let i = mmax(0, _position - hsPosition), len = mmin(hs.length, _position - hsPosition + count); i < len; i++) {
-                    const [h] = hs.splice(i, 1)
-                    len--
-                    i--
-
-                    h.height = 0
-                    hsPush(h)
-                    //h.$el.remove()
-                }
+                // for (let i = mmax(0, _position - hsPosition), len = mmin(hs.length, _position - hsPosition + count); i < len; i++) {
+                //     const [h] = hs.splice(i, 1)
+                //     len--
+                //     i--
+                //
+                //     //hsHeight -= h.height
+                //     h.height = 0
+                //     hsPush(h)
+                //     //h.$el.remove()
+                // }
 
                 update()
             }
+
+            console.log('removed', {hsPosition, position, _position, count, offset, stackFromBottom})
         },
 
-        update: update,
-        updateNow: updateNow,
+        update,
+        updateNow,
 
         setStackFromBottom(_stackFromBottom) {
-            updateNow()
-
             if (stackFromBottom !== _stackFromBottom) {
+                updateNow()
+
                 stackFromBottom = _stackFromBottom
 
                 let allFluid = true

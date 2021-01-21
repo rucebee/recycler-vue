@@ -62,13 +62,16 @@ export function AbstractSource() {
             return
         }
 
-        recycler.setStackFromBottom(false)
-        fn()
-        recycler.setStackFromBottom(true)
+        try {
+            recycler.setStackFromBottom(false)
+            fn()
+        } finally {
+            recycler.setStackFromBottom(true)
+        }
     }
 
     this.attach = _recycler => {
-        if (recycler != _recycler) {
+        if (recycler !== _recycler) {
             this.onRecyclerChanged(recycler, _recycler)
             this.recycler = recycler = _recycler
 
