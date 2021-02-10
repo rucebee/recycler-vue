@@ -1121,12 +1121,16 @@ function beforeCreate() {
 
     this.$options.watch = defaults({
         source(newValue) {
-            source = newValue
+            if (source !== newValue) {
+                source.detach(vm)
+                source = newValue
+                source.attach(vm)
 
-            _itemCount = source.itemCount
-            _getItem = source.getItem
+                _itemCount = source.itemCount
+                _getItem = source.getItem
 
-            this.onDatasetChanged()
+                this.onDatasetChanged()
+            }
         },
 
         stackFromBottom(newValue) {
