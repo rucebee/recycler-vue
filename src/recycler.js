@@ -104,7 +104,6 @@ function beforeCreate() {
         scrollMax,
         scrollRatio,
         maxOffset,
-        bottomOffset = -1,
 
         scrollTime = 0
 
@@ -408,23 +407,11 @@ function beforeCreate() {
                 if (position > maxPosition) {
                     hsPosition = maxPosition
                     hs.push(h = hsPop(hsPosition))
-
-                    hsOffset = 0
-                } else if (bottomOffset >= 0) {
-                    hsPosition = maxPosition
-                    hs.push(h = hsPop(hsPosition))
-
-                    hsOffset = bottomOffset + clientHeight - lastHeight
-                } else if (position < 0) {
-                    hsPosition = stickToTop ? 0 : maxPosition
-                    hs.push(h = hsPop(hsPosition))
-
-                    hsOffset = 0
                 } else {
-                    hsPosition = position
+                    hsPosition = position < 0 ? (stickToTop ? 0 : maxPosition) : position
                     hs.push(h = hsPop(hsPosition))
 
-                    hsOffset = offset
+                    hsOffset = clientHeight - offset - h.height
                 }
             } else {
                 if (position > maxPosition) {
@@ -432,13 +419,8 @@ function beforeCreate() {
                     hs.push(h = hsPop(hsPosition))
 
                     hsOffset = maxOffset
-                } else if (position < 0) {
-                    hsPosition = 0
-                    hs.push(h = hsPop(hsPosition))
-
-                    hsOffset = 0
                 } else {
-                    hsPosition = position
+                    hsPosition = position > -1 ? position : 0
                     hs.push(h = hsPop(hsPosition))
 
                     hsOffset = offset
@@ -487,7 +469,7 @@ function beforeCreate() {
 
         //if (!scrolling && !scrolled) {
         if (!scrolling) {
-            if (stackFromBottom && !stickToTop) {
+            if (stackFromBottom) {
                 if (bottomSpace > 0) {
                     up += bottomSpace
                     hsOffset = up
@@ -593,6 +575,7 @@ function beforeCreate() {
                 //     console.log({hsPosition, hsOffset, a})
                 // } else {
                 //     console.log({hsPosition, _hsPosition, hsOffset})
+                //
                 // }
 
                 //console.log(stat)
@@ -658,12 +641,14 @@ function beforeCreate() {
             keyboard ? scrollTop + keyboardAnchor.getBoundingClientRect().bottom - clientHeight : scrollTop
         ))
         down = up = hsOffset
+        //down = hsOffset + hsHeight
 
         let j = 0, fluidCheck = 0
         while (j < hs.length) {
-            if (down > clientHeight) {
+            if (down > clientHeight - footerHeight) {
                 hsPush(h = hs.pop())
                 hsHeight -= h.height
+                down -= h.height
                 continue
             }
 
@@ -698,7 +683,7 @@ function beforeCreate() {
 
             down += h.height
 
-            if (down < 0) {
+            if (down < headerHeight) {
                 hsPosition++
                 hsOffset += h.height
                 hsHeight -= h.height
@@ -718,45 +703,34 @@ function beforeCreate() {
 
         hsFlush()
 
-        if (stackFromBottom
-            && hsPosition + hs.length - 1 === maxPosition
-            && !hs[hs.length - 1].maxHeight
-            && (bottomOffset = hsOffset + hsHeight - clientHeight) >= 0
-            && bottomOffset < (lastHeight - footerHeight) / 2
-        ) {
-        } else {
-            bottomOffset = -1
-        }
+        if (stackFromBottom) {
+            position = hsPosition + hs.length - 1
+            offset = clientHeight - hsHeight - hsOffset
 
-        // if (stackFromBottom) {
-        //     // position = maxPosition - hsPosition - hs.length + 1
-        //     position = hsPosition + hs.length - 1
-        //     offset = clientHeight - hsHeight - hsOffset
-        //
-        //     if (fluidCheck === 3) {
-        //         for (i = hs.length - 1; i >= 0; i--) {
-        //             if (hs[i].maxHeight) {
-        //                 position--
-        //                 offset += hs[i].height
-        //             } else break
-        //         }
-        //     } else if (fluidCheck === 2 && hs.length === itemCount) {
-        //         position = -1
-        //     }
-        // } else {
-
-        position = hsPosition
-        offset = hsOffset
-
-        if (fluidCheck === 3) {
-            for (h of hs) {
-                if (h.maxHeight) {
-                    position++
-                    offset += h.height
-                } else break
+            if (fluidCheck === 3) {
+                for (i = hs.length - 1; i >= 0; i--) {
+                    if (hs[i].maxHeight) {
+                        position--
+                        offset += hs[i].height
+                    } else break
+                }
+            } else if (fluidCheck === 2 && hs.length === itemCount) {
+                position = -1
             }
-        } else if (fluidCheck === 2 && hs.length === itemCount) {
-            position = -1
+        } else {
+            position = hsPosition
+            offset = hsOffset
+
+            if (fluidCheck === 3) {
+                for (h of hs) {
+                    if (h.maxHeight) {
+                        position++
+                        offset += h.height
+                    } else break
+                }
+            } else if (fluidCheck === 2 && hs.length === itemCount) {
+                position = -1
+            }
         }
 
         // console.log({
@@ -809,10 +783,13 @@ function beforeCreate() {
         footerHeight = bodyHeight - headerHeight - el.offsetHeight
 
         console.log('resize', {
-            clientHeight, clientHeightEx,
+            clientHeight,
+            clientHeightEx,
             scrollMax,
-            headerHeight, footerHeight, bodyHeight,
-            elHeight: el.offsetHeight
+            headerHeight,
+            bodyHeight,
+            elHeight: el.offsetHeight,
+            footerHeight
         })
 
         update()
@@ -1173,14 +1150,13 @@ function beforeCreate() {
                 }
             } else if (stackFromBottom
                 && _position >= maxPosition
-                && bottomOffset >= 0
-            // && position === maxPosition
-            // && -offset < (footerHeight + lastHeight) / 2
+                && position === maxPosition
+                && -offset < (footerHeight + lastHeight) / 2
             ) {
                 position = maxPosition + count
                 offset = 0
-            } else if (_position < position) {
-                position += count
+            } else {
+                if (_position < position) position += count
             }
 
             if (touched && _position < touchPosition)
@@ -1278,19 +1254,16 @@ function beforeCreate() {
         position(_position, _offset = 0) {
             if (_position === undefined)
                 return [
-                    position < 0 ? undefined : position,
-                    // stackFromBottom
-                    // ? position !== maxPosition ? offset - footerHeight : offset
-                    // :
-                    position ? offset - headerHeight : offset
+                    position,
+                    stackFromBottom
+                        ? position !== maxPosition ? offset - footerHeight : offset
+                        : position ? offset - headerHeight : offset
                 ]
 
             position = _position < 0 ? itemCount + _position : _position ?? 0
-            offset =
-                // stackFromBottom
-                // ? position !== maxPosition ? _offset + footerHeight : _offset
-                // :
-                position ? _offset + headerHeight : _offset
+            offset = stackFromBottom
+                ? position !== maxPosition ? _offset + footerHeight : _offset
+                : position ? _offset + headerHeight : _offset
 
             console.log('position', {position, offset})
 
@@ -1299,6 +1272,14 @@ function beforeCreate() {
 
         startPosition() {
             return hsPosition
+        },
+
+        startOffset() {
+            return hsOffset
+        },
+
+        startPart() {
+            return hsOffset + hs[0].height - footerHeight
         },
 
         endPosition() {
@@ -1311,9 +1292,7 @@ function beforeCreate() {
         scrollTop: top => {
             if (top !== undefined) {
                 position = 0
-                offset =
-                    //stackFromBottom ? clientHeight + top - firstHeight :
-                    -top
+                offset = stackFromBottom ? clientHeight + top - firstHeight : -top
 
                 //console.log('scrollTop ->', {position, top, hsOffset})
 
@@ -1330,19 +1309,6 @@ function beforeCreate() {
 
             return _scrollTop
         },
-
-        offset(position) {
-            const h = hs[position - hsPosition]
-            if (!h) return
-
-            //console.log({t: parseFloat(h.style.top), hsOffset, clientHeight, h: h.height, footerHeight})
-
-            return
-            // stackFromBottom
-            // ? clientHeight - parseFloat(h.style.top) - h.height
-            // :
-            parseFloat(h.style.top)
-        }
     }, this.$options.methods)
 }
 
