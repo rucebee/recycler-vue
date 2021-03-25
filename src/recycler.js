@@ -1279,7 +1279,7 @@ function beforeCreate() {
         },
 
         startPart() {
-            return hsOffset + hs[0].height - footerHeight
+            return hs.length ? hsOffset + hs[0].height - footerHeight : 0
         },
 
         endPosition() {
