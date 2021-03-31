@@ -947,6 +947,8 @@ function beforeCreate() {
     }
 
     function mounted() {
+        const Vue = this.$root.__proto__.constructor
+
         el = this.$el
         win = el.closest('.recycler-window') ?? window
         isWindow = win === window
@@ -994,11 +996,16 @@ function beforeCreate() {
 
         loop: for (const type in vm.$slots)
             for (const vnode of vm.$slots[type]) {
-                if (!vnode || !vnode.componentOptions)
-                    continue;
+                if (!vnode || !vnode.tag) continue;
 
                 ((type, vnode) => {
-                    const Ctor = vnode.componentOptions.Ctor,
+                    const Ctor = vnode.componentOptions
+                        ? vnode.componentOptions.Ctor
+                        : Vue.extend({
+                            render(h) {
+                                return vnode
+                            }
+                        }),
                         oldOptions = Ctor.options,
                         options = Object.assign({}, oldOptions),
                         dataFn = options.data
@@ -1019,23 +1026,35 @@ function beforeCreate() {
 
                     delete options.computed.position
 
-                    slots[type] = () => {
-                        Ctor.options = options
-                        const o = new Ctor({
-                            _isComponent: true,
-                            _parentVnode: vnode,
-                            parent: vm
-                        })
-                        Ctor.options = oldOptions
+                    if (vnode.componentOptions) {
+                        slots[type] = () => {
+                            Ctor.options = options
+                            const o = new Ctor({
+                                _isComponent: true,
+                                _parentVnode: vnode,
+                                parent: vm
+                            })
+                            Ctor.options = oldOptions
 
-                        return o
+                            return o
+                        }
+                    } else {
+                        slots[type] = () => {
+                            Ctor.options = options
+                            const o = new Ctor({
+                                // _isComponent: true,
+                                // _parentVnode: vnode,
+                                parent: vm
+                            })
+                            Ctor.options = oldOptions
+
+                            return o
+                        }
                     }
                 })(type, vnode)
 
                 continue loop
             }
-
-        const Vue = this.$root.__proto__.constructor
 
         emptySlot = () => new Vue({
             render: h => h('div')
