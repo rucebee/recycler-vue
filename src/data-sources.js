@@ -1,4 +1,4 @@
-import {findIndex as l_findIndex, findLast as l_findLast, noop} from 'lodash-es'
+import {findIndex, findLast, noop} from 'lodash-es'
 import {timeout} from '@rucebee/utils'
 
 export function AbstractSource() {
@@ -12,7 +12,7 @@ export function AbstractSource() {
 
     this.indexOf = (item, fromIndex) => list.indexOf(item, fromIndex)
     this.findIndex = function () {
-        return l_findIndex(list, ...arguments)
+        return findIndex(list, ...arguments)
     }
 
     this.insert = (position, ...items) => {
@@ -249,31 +249,30 @@ export function WaterfallSource(query, limit, loadingItem) {
 
     const list = this.list, viewDistance = limit >> 1,
 
-        refresh = new PeriodicRefresh(() => query.call(this, l_findLast(list, 'id', list.length - 2), limit).then(_list => {
-            // if(list.length > 1)
-            //     return
+        refresh = new PeriodicRefresh(() => {
+            const item = findLast(list, 'id', list.length - 2)
 
-            if (_list?.length) {
-                this.insert(list.length - 1, ..._list)
+            return query.call(this, item, limit).then(_list => {
+                if (item?.id !== findLast(list, 'id', list.length - 2)?.id) return
 
-                const startPos = this.startPosition()
-                if (startPos > limit)
-                    this.remove(0, startPos - viewDistance)
+                if (_list?.length) {
+                    this.insert(list.length - 1, ..._list)
 
-                this.triggerUpdate()
-            } else if (loading) {
-                loading = false
+                    const startPos = this.startPosition()
+                    if (startPos > limit)
+                        this.remove(0, startPos - viewDistance)
 
-                this.remove(loadingItem)
-            }
-        }), 0)
+                    this.triggerUpdate()
+                } else if (loading) {
+                    loading = false
+
+                    this.remove(loadingItem)
+                }
+
+            })
+        }, 0)
 
     let loading = false
-
-    this.onRange = (startPos, endPos) => {
-        if (loading && endPos + viewDistance >= list.length)
-            refresh.query()
-    }
 
     this.onAttach = () => {
         if (!loading) {
@@ -291,6 +290,24 @@ export function WaterfallSource(query, limit, loadingItem) {
         if (loading && position + hs.length - 1 + viewDistance >= list.length)
             refresh.query()
     }
+
+    this.cut = position => {
+        console.log({position})
+
+        let len = list.length - position - 2
+        if (loading) len--
+        if (len < 1) return
+
+        this.remove(position + 1, len)
+
+        if (!loading) {
+            loading = true
+
+            this.insert(list.length, loadingItem)
+        }
+
+        this.triggerUpdate()
+    }
 }
 
 WaterfallSource.prototype = Object.create(AbstractSource.prototype)
@@ -300,81 +317,68 @@ WaterfallSource.prototype.onRecyclerChanged = onRecyclerChanged
 export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromId = 0, period = 0) {
     AbstractSource.call(this)
 
-    let oldestItem = null, latestItem = null, enabled = true, attached = false
-
-    // Object.defineProperty(this, 'latest', {
-    //     get: () => latestItem,
-    //     set: value => {
-    //         latestItem = value
-    //     }
-    // })
+    let firstIndex = 1, enabled = true, attached = false
 
     const list = this.list, viewDistance = limit >> 1,
 
         cutHistory = () => {
-            const startPos = this.startPosition(),
-                firstIndex = oldestItem || !latestItem && list.length ? 1 : 0
+            const startPos = this.startPosition()
 
             if (startPos > limit && startPos - viewDistance < list.length - firstIndex) {
                 this.remove(firstIndex, startPos - viewDistance)
 
-                const prevItem = oldestItem
-                oldestItem = list[firstIndex]
-                if (this.attached && !prevItem)
-                    historyRefresh.attach()
-
-                console.log('cutHistory', firstIndex, startPos - viewDistance, oldestItem)
-
-                if (!firstIndex)
+                if (!firstIndex) {
+                    firstIndex = 1
                     this.insert(0, loadingItem)
+                }
+
+                console.log('cutHistory', firstIndex, startPos - viewDistance, list[firstIndex])
 
                 return true
             }
         },
 
-        nextRefresh = new PeriodicRefresh(() => queryNext.call(this, latestItem).then(_list => {
+        nextRefresh = new PeriodicRefresh(() => queryNext.call(this, list.length <= firstIndex ? undefined : list[list.length - 1]).then(_list => {
             if (_list.length) {
-                latestItem = _list[_list.length - 1]
-                this.insert(list.length, ..._list)
-
-                if (!oldestItem) {
-                    oldestItem = _list[0]
-                    if (this.attached)
-                        historyRefresh.attach()
+                if (list.length <= firstIndex) {
+                    this.insert(list.length, ..._list)
 
                     this.triggerUpdate()
-                }
+                } else {
+                    this.insert(list.length, ..._list)
 
-                if (!historyRefresh.request) {
-                    cutHistory()
+                    if (!historyRefresh.request) cutHistory()
                 }
-            } else if (!latestItem && list.length) {
-                this.remove(0, list.length)
+            } else if (list.length <= firstIndex && firstIndex) {
+                firstIndex = 0
+                this.remove(0, 1)
             } else if (!historyRefresh.request) {
                 cutHistory()
             }
         }), period),
 
-        historyRefresh = new PeriodicRefresh(() => queryHistory.call(this, oldestItem, limit).then(_list => {
-            if (!cutHistory()) {
-                const prevItem = oldestItem
-                if (_list.length) {
-                    oldestItem = _list[0]
-                    if (this.attached && !prevItem)
-                        historyRefresh.attach()
+        historyRefresh = new PeriodicRefresh(() => {
+            if (!firstIndex || list.length <= firstIndex) return Promise.resolve()
 
-                    this.insert(1, ..._list)
+            const item = list[firstIndex]
+
+            return queryHistory.call(this, list[firstIndex], limit).then(_list => {
+                if (!_list
+                    || !firstIndex
+                    || list.length <= firstIndex
+                    || item.id !== list[firstIndex].id
+                    || cutHistory()) return
+
+                if (_list.length) {
+                    this.insert(firstIndex, ..._list)
 
                     this.triggerUpdate()
                 } else {
-                    oldestItem = null
-                    if (this.attached && prevItem)
-                        historyRefresh.detach()
-
+                    firstIndex = 0
                     this.remove(0)
                 }
-            }
-        }), 0)
+            })
+        }, 0)
 
     list.push(loadingItem)
 
@@ -385,9 +389,7 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
 
         if (enabled) {
             nextRefresh.attach()
-
-            if (oldestItem)
-                historyRefresh.attach()
+            historyRefresh.attach()
         }
     }
 
@@ -408,9 +410,8 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
     }
 
     this.recyclerLaidout = (position, hs) => {
-        if (oldestItem && position <= viewDistance)
+        if (firstIndex && list.length > firstIndex && position <= viewDistance)
             historyRefresh.query()
-
     }
 }
 

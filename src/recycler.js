@@ -24,14 +24,14 @@ function beforeCreate() {
         _getItem,
         stackFromBottom,
         stickToTop,
-        emptySlot
+        emptySlot,
+        hsCache = {}
 
     const vm = this,
         slots = {},
 
         hs = [],
         hsBinded = [],
-        hsCache = {},
 
         timeStamp = Date.now() <= new Event('check').timeStamp ? Date.now : performance.now.bind(performance),
 
@@ -1126,6 +1126,10 @@ function beforeCreate() {
                 _getItem = source.getItem
 
                 this.onDatasetChanged()
+
+                while (hs.length) hsPush(hs.pop())
+                hsFlush()
+                hsCache = {}
             }
         },
 
