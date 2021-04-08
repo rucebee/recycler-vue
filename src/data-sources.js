@@ -342,13 +342,13 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
             if (_list.length) {
                 if (list.length <= firstIndex) {
                     this.insert(list.length, ..._list)
-
-                    this.triggerUpdate()
                 } else {
                     this.insert(list.length, ..._list)
 
                     if (!historyRefresh.request) cutHistory()
                 }
+
+                if (_list.length >= limit) this.triggerUpdate()
             } else if (list.length <= firstIndex && firstIndex) {
                 firstIndex = 0
                 this.remove(0, 1)
@@ -369,13 +369,13 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
                     || item.id !== list[firstIndex].id
                     || cutHistory()) return
 
-                if (_list.length) {
-                    this.insert(firstIndex, ..._list)
+                if (_list.length) this.insert(firstIndex, ..._list)
 
-                    this.triggerUpdate()
-                } else {
+                if (_list.length < limit) {
                     firstIndex = 0
                     this.remove(0)
+                } else {
+                    this.triggerUpdate()
                 }
             })
         }, 0)

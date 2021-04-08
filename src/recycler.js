@@ -588,7 +588,7 @@ function beforeCreate() {
                     if (scrollClue < 0) {
                         scrollDelta = !hsPosition ? hsOffset : -newScrollTop
 
-                        console.log({scrollDelta})
+                        //console.log({scrollDelta})
 
                         _scroll(scrollTop = newScrollTop = 0)
                     } else if (scrollClue > 0) {
@@ -596,7 +596,7 @@ function beforeCreate() {
                         //hsOffset -= clientHeight - clientHeightOld
                         scrollDelta = hsPosition + hs.length - 1 === maxPosition ? hsOffset - (clientHeight - hsHeight) : scrollMax - newScrollTop
 
-                        console.log({scrollDelta, delta: clientHeight - clientHeightOld, hsOffset, hsOffsetOld})
+                        //console.log({scrollDelta, delta: clientHeight - clientHeightOld, hsOffset, hsOffsetOld})
 
                         _scroll(scrollTop = newScrollTop = scrollMax)
                     }
@@ -608,7 +608,7 @@ function beforeCreate() {
                             hsOffsetOld = hsOffset
                         hsOffset -= r * scrollDelta
 
-                        console.log({r, hsOffsetOld, hsOffset})
+                        //console.log({r, hsOffsetOld, hsOffset})
 
                         update()
                     } else {
@@ -625,7 +625,7 @@ function beforeCreate() {
                 }
 
                 if (mabs(scrollTop - newScrollTop) >= 1) {
-                    console.log('adjustScroll', {scrollTop, newScrollTop})
+                    //console.log('adjustScroll', {scrollTop, newScrollTop})
 
                     _scroll(scrollTop = newScrollTop)
                 }
@@ -1161,10 +1161,10 @@ function beforeCreate() {
         },
 
         onInsert(_position, count) {
-            console.log('insert', {hsPosition, position, _position, count, offset, stackFromBottom})
+            //console.log('insert', {hsPosition, position, _position, count, offset, stackFromBottom})
 
             if (position === -1) {
-                if (stackFromBottom && !stickToTop) {
+                if (stackFromBottom) {
                     position = maxPosition + count
                     offset = 0
                 } else {
@@ -1190,7 +1190,7 @@ function beforeCreate() {
 
             if (hsInvalidate(_position, count)) update()
 
-            console.log('inserted', {hsPosition, position, _position, count, offset, stackFromBottom})
+            //console.log('inserted', {hsPosition, position, _position, count, offset, stackFromBottom})
         },
 
         onRemove(_position, count) {
