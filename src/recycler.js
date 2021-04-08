@@ -782,15 +782,15 @@ function beforeCreate() {
         const bodyHeight = _bodyHeight()
         footerHeight = bodyHeight - headerHeight - el.offsetHeight
 
-        console.log('resize', {
-            clientHeight,
-            clientHeightEx,
-            scrollMax,
-            headerHeight,
-            bodyHeight,
-            elHeight: el.offsetHeight,
-            footerHeight
-        })
+        // console.log('resize', {
+        //     clientHeight,
+        //     clientHeightEx,
+        //     scrollMax,
+        //     headerHeight,
+        //     bodyHeight,
+        //     elHeight: el.offsetHeight,
+        //     footerHeight
+        // })
 
         update()
     }, onScroll = ev => {
@@ -1226,7 +1226,7 @@ function beforeCreate() {
                 update()
             }
 
-            console.log('removed', {hsPosition, position, _position, count, offset, stackFromBottom})
+            //console.log('removed', {hsPosition, position, _position, count, offset, stackFromBottom})
         },
 
         update,
