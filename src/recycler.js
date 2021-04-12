@@ -1194,7 +1194,7 @@ function beforeCreate() {
         },
 
         onRemove(_position, count) {
-            console.log('remove', {hsPosition, position, _position, count, offset, stackFromBottom})
+            //console.log('remove', {hsPosition, position, _position, count, offset, stackFromBottom})
 
             const invalid = hsInvalidate(_position, count)
 

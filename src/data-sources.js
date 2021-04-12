@@ -338,7 +338,7 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
             }
         },
 
-        nextRefresh = new PeriodicRefresh(() => queryNext.call(this, list.length <= firstIndex ? undefined : list[list.length - 1]).then(_list => {
+        nextRefresh = new PeriodicRefresh(() => queryNext.call(this, list.length <= firstIndex ? undefined : list[list.length - 1], limit).then(_list => {
             if (_list.length) {
                 if (list.length <= firstIndex) {
                     this.insert(list.length, ..._list)
@@ -381,6 +381,8 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
         }, 0)
 
     list.push(loadingItem)
+
+    this.empty = () => list.length <= firstIndex
 
     this.refresh = nextRefresh.query
 
