@@ -266,15 +266,18 @@ export function WaterfallSource(query, limit, loadingItem) {
                 } else if (loading) {
                     loading = false
 
+
                     this.remove(loadingItem)
                 }
 
             })
         }, 0)
 
-    let loading = false
+    let loading = false, attached = false
 
     this.onAttach = () => {
+        attached = true
+
         if (!loading) {
             loading = true
 
@@ -284,7 +287,21 @@ export function WaterfallSource(query, limit, loadingItem) {
         refresh.attach()
     }
 
-    this.onDetach = refresh.detach
+    this.onDetach = () => {
+        attached = false
+
+        refresh.detach()
+    }
+    this.reset = () => {
+        const len = list.length
+        list.length = 0
+        this.onRemove(0, len)
+
+        if(attached) {
+            this.insert(list.length, loadingItem)
+            loading = true
+        }
+    }
 
     this.recyclerLaidout = (position, hs) => {
         if (loading && position + hs.length - 1 + viewDistance >= list.length)
