@@ -41,6 +41,21 @@ function beforeCreate() {
             //console.log('_scroll', top, scrollTime)
         },
 
+        _windowHeight = () => {
+            const EMPTY_DIV = document.createElement('div')
+            EMPTY_DIV.style.height = '100vh'
+            EMPTY_DIV.style.width = 0
+            EMPTY_DIV.style.position = 'absolute'
+
+            document.body.append(EMPTY_DIV)
+
+            const height = EMPTY_DIV.clientHeight
+
+            EMPTY_DIV.remove()
+
+            return height
+        },
+
         _bodyHeight = () => {
             const EMPTY_DIV = document.createElement('div'),
                 ADD_1PX = el.offsetHeight ? 0 : 1
@@ -88,6 +103,8 @@ function beforeCreate() {
         hsOffset = 0,
         hsHeight = 0,
         allShown = true,
+
+        windowHeight,
 
         clientHeight,
         clientHeightOld,
@@ -180,11 +197,16 @@ function beforeCreate() {
 
             const computedStyle = h.$el.currentStyle || getComputedStyle(h.$el)
             if (computedStyle.maxHeight.endsWith('%')) {
-                h.maxHeight = (parseInt(computedStyle.maxHeight) || 0) / 100
-                h.minHeight = (parseInt(computedStyle.minHeight) || h.$el.offsetHeight)
-
+                h.maxHRatio = (parseInt(computedStyle.maxHeight) || 0) / 100
                 style.maxHeight = 'initial'
+            }
+
+            if (computedStyle.minHeight.endsWith('%')) {
+                h.minHRatio = (parseInt(computedStyle.minHeight) || 0) / 100
+
                 style.minHeight = 'initial'
+            } else {
+                h.minHeight = (parseInt(computedStyle.minHeight) || h.$el.offsetHeight)
             }
 
             //console.log('create', position)
@@ -206,9 +228,10 @@ function beforeCreate() {
         h.top = 0
         if (!position) h.top += headerHeight
 
-        if (h.maxHeight > 0) {
-            h.height = mmax(h.minHeight, h.maxHeight * clientHeight)
-                + h.top + (position === maxPosition ? footerHeight : 0)
+        if (h.maxHRatio > 0) {
+            if (h.minHRatio) h.minHeight = h.minHRatio * (windowHeight - headerHeight - footerHeight)
+
+            h.height = mmax(h.minHeight, h.maxHRatio * (windowHeight - headerHeight - footerHeight)) + h.top + (position === maxPosition ? footerHeight : 0)
 
             //Doing it later:
             //h.style.height = h.height + 'px'
@@ -226,8 +249,12 @@ function beforeCreate() {
         if (h.height) {
             hsBinded[h.position] = h
 
+            //console.log('hsPush.1', {'h.type': h.type, 'h.position': h.position})
+
             return
         }
+
+        //console.log('hsPush.2', {'h.type': h.type, 'h.position': h.position})
 
         let type = h.type,
             hsTypeCache = hsCache[type]
@@ -257,8 +284,11 @@ function beforeCreate() {
             const hsTypeCache = hsCache[type]
 
             for (const h of hsTypeCache) {
-                if (h.$el.parentElement)
+                if (h.$el.parentElement) {
+                    //console.log('hsFlush.remove', {'h.type': h.type, 'h.position': h.position})
+
                     h.$el.remove()
+                }
             }
         }
     }
@@ -311,7 +341,7 @@ function beforeCreate() {
             fluidHeight = 0
 
         for (let h of hs)
-            if (h.maxHeight) {
+            if (h.maxHRatio) {
                 fluidCount++
                 fluidHeight += h.height
             }
@@ -646,9 +676,11 @@ function beforeCreate() {
         let j = 0, fluidCheck = 0
         while (j < hs.length) {
             if (down > clientHeight - footerHeight) {
-                hsPush(h = hs.pop())
+                h = hs.pop()
                 hsHeight -= h.height
-                down -= h.height
+
+                hsPush(h)
+
                 continue
             }
 
@@ -656,7 +688,7 @@ function beforeCreate() {
             //h.style.zIndex = j
             //h.style.order = j
 
-            if (h.maxHeight) {
+            if (h.maxHRatio) {
                 let top = down, height = h.height - h.top
 
                 if (hsPosition + j === maxPosition)
@@ -669,7 +701,7 @@ function beforeCreate() {
                     }
 
                     if (j === hs.length - 1 && down + height > clientHeight)
-                        height = mmax(h.minHeight, clientHeight - down)
+                        height = mmax(h.minHeight, windowHeight - headerHeight - footerHeight - down)
                 }
 
                 h.style.top = scrollOffset + top + h.top + 'px'
@@ -709,7 +741,7 @@ function beforeCreate() {
 
             if (fluidCheck === 3) {
                 for (i = hs.length - 1; i >= 0; i--) {
-                    if (hs[i].maxHeight) {
+                    if (hs[i].maxHRatio) {
                         position--
                         offset += hs[i].height
                     } else break
@@ -723,7 +755,7 @@ function beforeCreate() {
 
             if (fluidCheck === 3) {
                 for (h of hs) {
-                    if (h.maxHeight) {
+                    if (h.maxHRatio) {
                         position++
                         offset += h.height
                     } else break
@@ -770,6 +802,7 @@ function beforeCreate() {
         hsInvalidate(0, itemCount)
 
         clientHeight = _clientHeight()
+        windowHeight = isWindow ? _windowHeight() : clientHeight
         clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight)
         scrollMax = mmax(0, doc.scrollHeight - clientHeight)
 
@@ -1245,7 +1278,7 @@ function beforeCreate() {
                     offset = clientHeight - hsHeight - hsOffset
 
                     for (let i = hs.length - 1; i >= 0; i--) {
-                        if (hs[i].maxHeight) {
+                        if (hs[i].maxHRatio) {
                             position--
                             offset += hs[i].height
                         } else {
@@ -1258,7 +1291,7 @@ function beforeCreate() {
                     offset = hsOffset
 
                     for (let h of hs) {
-                        if (h.maxHeight) {
+                        if (h.maxHRatio) {
                             position++
                             offset += h.height
                         } else {

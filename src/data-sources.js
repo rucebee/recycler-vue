@@ -75,7 +75,7 @@ export function AbstractSource() {
             this.onRecyclerChanged(recycler, _recycler)
             this.recycler = recycler = _recycler
 
-            this.onDatasetChanged = recycler.onDatasetChanged
+            this.recyclerDataset = recycler.onDatasetChanged
             this.recyclerUpdate = recycler.onUpdate
             this.recyclerInsert = recycler.onInsert
             this.recyclerRemove = recycler.onRemove
@@ -83,7 +83,7 @@ export function AbstractSource() {
             this.startPosition = recycler.startPosition
             this.endPosition = recycler.endPosition
 
-            this.onDatasetChanged()
+            this.recyclerDataset()
 
             if (!this.attached) {
                 this.attached = true
@@ -103,7 +103,7 @@ export function AbstractSource() {
             this.onDetach()
         }
 
-        this.onDatasetChanged = noop
+        this.recyclerDataset = noop
         this.recyclerUpdate = noop
         this.recyclerInsert = noop
         this.recyclerRemove = noop
@@ -180,6 +180,16 @@ function PeriodicRefresh(query, period) {
         }
     }
 
+    this.period = _period => {
+        period = _period
+        if (period) {
+            before = Date.now() + period
+            next()
+        } else {
+            nextTimeout.stop()
+        }
+    }
+
     this.query = dirty => {
         if (this.request) {
             if (dirty)
@@ -236,12 +246,9 @@ export function ListSource(query, period) {
 ListSource.prototype = Object.create(AbstractSource.prototype)
 ListSource.prototype.constructor = ListSource
 
-function onRecyclerChanged(from, to) {
-    if (from) {
-        from.$off('laidout', this.recyclerLaidout)
-    } else if (to) {
-        to.$on('laidout', this.recyclerLaidout)
-    }
+function subscribeRecyclerLaidout(from, to) {
+    if (from) from.$off('laidout', this.recyclerLaidout)
+    if (to) to.$on('laidout', this.recyclerLaidout)
 }
 
 export function WaterfallSource(query, limit, loadingItem) {
@@ -297,7 +304,7 @@ export function WaterfallSource(query, limit, loadingItem) {
         list.length = 0
         this.onRemove(0, len)
 
-        if(attached) {
+        if (attached) {
             this.insert(list.length, loadingItem)
             loading = true
         }
@@ -309,8 +316,6 @@ export function WaterfallSource(query, limit, loadingItem) {
     }
 
     this.cut = position => {
-        console.log({position})
-
         let len = list.length - position - 2
         if (loading) len--
         if (len < 1) return
@@ -329,9 +334,9 @@ export function WaterfallSource(query, limit, loadingItem) {
 
 WaterfallSource.prototype = Object.create(AbstractSource.prototype)
 WaterfallSource.prototype.constructor = WaterfallSource
-WaterfallSource.prototype.onRecyclerChanged = onRecyclerChanged
+WaterfallSource.prototype.onRecyclerChanged = subscribeRecyclerLaidout
 
-export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromId = 0, period = 0) {
+export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromItem = null, period = 0) {
     AbstractSource.call(this)
 
     let firstIndex = 1, enabled = true, attached = false
@@ -355,7 +360,9 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
             }
         },
 
-        nextRefresh = new PeriodicRefresh(() => queryNext.call(this, list.length <= firstIndex ? undefined : list[list.length - 1], limit).then(_list => {
+        nextRefresh = new PeriodicRefresh(() => queryNext.call(this, list.length <= firstIndex ? fromItem : list[list.length - 1], limit).then(_list => {
+            //console.log('nextRefresh', {list, _list})
+
             if (_list.length) {
                 if (list.length <= firstIndex) {
                     this.insert(list.length, ..._list)
@@ -365,14 +372,27 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
                     if (!historyRefresh.request) cutHistory()
                 }
 
-                if (_list.length >= limit) this.triggerUpdate()
+                if (_list.length >= limit) {
+                    if (!fromItem) nextRefresh.query(true)
+                } else {
+                    if (firstIndex) {
+                        firstIndex = 0
+                        this.remove(0, 1)
+                    }
+
+                    if (fromItem) {
+                        fromItem = null
+
+                        nextRefresh.period(period)
+                    }
+                }
             } else if (list.length <= firstIndex && firstIndex) {
                 firstIndex = 0
                 this.remove(0, 1)
             } else if (!historyRefresh.request) {
                 cutHistory()
             }
-        }), period),
+        }), fromItem ? 0 : period),
 
         historyRefresh = new PeriodicRefresh(() => {
             if (!firstIndex || list.length <= firstIndex) return Promise.resolve()
@@ -429,8 +449,15 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
     }
 
     this.recyclerLaidout = (position, hs) => {
-        if (firstIndex && list.length > firstIndex && position <= viewDistance)
-            historyRefresh.query()
+        //console.log('recyclerLaidout', {position, hs, firstIndex, list, fromItem})
+
+        if (firstIndex && list.length > firstIndex) {
+            if (position <= viewDistance)
+                historyRefresh.query()
+
+            if (fromItem && position + hs.length - 1 + viewDistance >= list.length)
+                nextRefresh.query()
+        }
     }
 }
 
@@ -442,4 +469,139 @@ HistorySource.prototype.onAttach = function () {
 HistorySource.prototype.onDetach = function () {
     this._onDetach()
 }
-HistorySource.prototype.onRecyclerChanged = onRecyclerChanged
+HistorySource.prototype.onRecyclerChanged = subscribeRecyclerLaidout
+
+export function ProxySource(...srcs) {
+    AbstractSource.call(this)
+
+    this.srcs = srcs
+
+    const list = this.list
+    let attached = false
+
+    const recyclerProxy = (src, index) => ({
+        onDatasetChanged: () => {
+            list.length = 0
+
+            for (let i = 0; i < srcs.length; i++) {
+                list.push(...srcs[i].list)
+            }
+
+            this.recycler.onDatasetChanged()
+        },
+        onUpdate: (position, count) => {
+            let base = 0
+            for (let i = 0; i < index; i++)
+                base += srcs[i].itemCount()
+
+            list.splice(base + position, count, ...src.list.slice(position, position + count))
+
+            this.recycler.onUpdate(base + position, count)
+
+            this.recycler.$emit('changed', index, src, base)
+        },
+        onInsert: (position, count) => {
+            let base = 0
+            for (let i = 0; i < index; i++)
+                base += srcs[i].itemCount()
+
+            //console.log('onInsert', {position, count, base, index})
+
+            list.splice(base + position, 0, ...src.list.slice(position, position + count))
+
+            this.recycler.onInsert(base + position, count)
+
+            this.recycler.$emit('changed', index, src, base)
+        },
+        onRemove: (position, count) => {
+            let base = 0
+            for (let i = 0; i < index; i++)
+                base += srcs[i].itemCount()
+
+            //console.log('onRemove', {position, count, base})
+
+            list.splice(base + position, count)
+
+            this.recycler.onRemove(base + position, count)
+
+            this.recycler.$emit('changed', index, src, base)
+        },
+        update: () => {
+            this.recycler.update()
+        },
+        startPosition: () => {
+            let base = 0
+            for (let i = 0; i < index; i++)
+                base += srcs[i].itemCount()
+
+            return this.recycler.startPosition() - base
+        },
+        endPosition: () => {
+            let base = 0
+            for (let i = 0; i < index; i++)
+                base += srcs[i].itemCount()
+
+            return this.recycler.endPosition() - base
+        },
+
+        $on: noop,
+        $off: noop,
+    })
+
+
+    this._onAttach = () => {
+        attached = true
+
+        list.length = 0
+
+        for (let i = 0; i < srcs.length; i++) {
+            list.push(...srcs[i].list)
+
+            srcs[i].attach(recyclerProxy(srcs[i], i))
+        }
+    }
+
+    this._onDetach = () => {
+        attached = false
+
+        for (let i = 0; i < srcs.length; i++)
+            srcs[i].detach()
+    }
+
+    this.recyclerLaidout = (position, hs) => {
+        let base = 0
+
+        for (let i = 0; i < srcs.length; i++) {
+            const src = srcs[i]
+            if (src.recyclerLaidout) {
+                if (position + hs.length - 1 >= base && position < base + src.itemCount())
+                    src.recyclerLaidout(
+                        //position < base ? 0 : position - base,
+                        Math.max(0, position - base),
+                        hs.slice(
+                            //position < base ? base - position : 0,
+                            Math.max(0, base - position),
+                            //position + hs.length, base + src.itemCount() < position + hs.length ? hs.length - base + src.itemCount() - position : hs.length,
+                            hs.length - Math.max(0, base - src.itemCount() + position),
+                        ),
+                        base
+                    )
+
+            } // base = 3, ic = 4,  len = 10
+            // base + ic <= pos + len
+
+            base += src.itemCount()
+        }
+    }
+}
+
+ProxySource.prototype = Object.create(AbstractSource.prototype)
+ProxySource.prototype.constructor = ProxySource
+ProxySource.prototype.onAttach = function () {
+    this._onAttach()
+}
+ProxySource.prototype.onDetach = function () {
+    this._onDetach()
+}
+ProxySource.prototype.onRecyclerChanged = subscribeRecyclerLaidout
+
