@@ -56,20 +56,6 @@ export function AbstractSource() {
         return this
     }
 
-    this.lockTop = fn => {
-        if (!recycler) {
-            fn()
-            return
-        }
-
-        try {
-            recycler.setStackFromBottom(false)
-            fn()
-        } finally {
-            recycler.setStackFromBottom(true)
-        }
-    }
-
     this.attach = _recycler => {
         if (recycler !== _recycler) {
             this.onRecyclerChanged(recycler, _recycler)
@@ -477,7 +463,7 @@ export function ProxySource(...srcs) {
     this.srcs = srcs
 
     const list = this.list
-    let attached = false
+    let attached = false, maxCount = null
 
     const recyclerProxy = (src, index) => ({
         onDatasetChanged: () => {
@@ -546,8 +532,41 @@ export function ProxySource(...srcs) {
 
         $on: noop,
         $off: noop,
+        $emit:  (...args) => this.recycler.$emit(...args),
+        $notify: (...args) => this.recycler.$notify(...args),
     })
 
+    this.setMaxCount = (count = null) => {
+        const prevCount = maxCount
+        maxCount = count
+
+        if (!this.recycler) return
+
+        if (count === null) {
+            if (prevCount !== null && this.list.length > prevCount)
+                this.recycler.onInsert(prevCount, this.list.length - prevCount)
+        } else if (count < this.list.length) {
+            this.recycler.onRemove(count, this.list.length - count)
+        }
+    }
+
+    this.getMaxCount = () => maxCount
+
+    this.itemCount = () => {
+        return maxCount !== null ? Math.min(maxCount, list.length) : list.length
+    }
+
+    this.getBase = index => {
+        if (index >= srcs.length) index = srcs.length - 1
+
+        let base = 0
+        for (let i = 0; i < index; i++) {
+            //console.log({i, count: srcs[i].itemCount()})
+            base += srcs[i].itemCount()
+        }
+
+        return base
+    }
 
     this._onAttach = () => {
         attached = true
@@ -587,8 +606,7 @@ export function ProxySource(...srcs) {
                         base
                     )
 
-            } // base = 3, ic = 4,  len = 10
-            // base + ic <= pos + len
+            }
 
             base += src.itemCount()
         }

@@ -1,7 +1,8 @@
 import {
     defaults,
     mergeWith,
-    findIndex
+    findIndex,
+    isFunction,
 } from 'lodash-es'
 
 import {animate, is_iOS} from '@rucebee/utils'
@@ -122,7 +123,12 @@ function beforeCreate() {
         scrollRatio,
         maxOffset,
 
-        scrollTime = 0
+        scrollTime = 0,
+
+        posId,
+        posResolve,
+        posPosition,
+        posOffset
 
     const update = () => {
             if (updateId)
@@ -432,6 +438,11 @@ function beforeCreate() {
             }
 
             // console.log('scrolling', {hsPosition, hsOffset, scrollTop, scrollMax, touching})
+        } else if (posId) {
+            hsPosition = posPosition
+            hsOffset = posOffset
+
+            hs.push(h = hsPop(hsPosition))
         } else {
             if (stackFromBottom) {
                 if (position > maxPosition) {
@@ -780,6 +791,7 @@ function beforeCreate() {
         }
 
         win.dispatchEvent(scrolledEvent = new Event('scroll'))
+        vm.$emit('scrolled', hsPosition, hs)
     }
 
     let scrolled = 0,
@@ -1194,7 +1206,15 @@ function beforeCreate() {
         },
 
         onInsert(_position, count) {
-            //console.log('insert', {hsPosition, position, _position, count, offset, stackFromBottom})
+            // console.log('insert', {
+            //     hsPosition,
+            //     position,
+            //     offset,
+            //     _position,
+            //     count,
+            //     stackFromBottom,
+            //     item: _getItem(_position)
+            // })
 
             if (position === -1) {
                 if (stackFromBottom) {
@@ -1218,12 +1238,15 @@ function beforeCreate() {
             if (touched && _position < touchPosition)
                 touchPosition += count
 
+            if (posId && _position < posPosition)
+                posPosition += count
+
             for (let i = mmax(0, _position - hsPosition); i < hs.length; i++)
                 hs[i].position += count
 
             if (hsInvalidate(_position, count)) update()
 
-            //console.log('inserted', {hsPosition, position, _position, count, offset, stackFromBottom})
+            // console.log('inserted', {hsPosition, position, offset, item: _getItem(_position)})
         },
 
         onRemove(_position, count) {
@@ -1239,6 +1262,9 @@ function beforeCreate() {
 
                 if (touched && _position <= touchPosition)
                     touchPosition -= mmin(count, touchPosition - _position + 1)
+
+                if (posId && _position <= posPosition)
+                    posPosition -= mmin(count, posPosition - _position + 1)
             }
 
             if (invalid) {
@@ -1324,6 +1350,94 @@ function beforeCreate() {
             console.log('position', {position, offset})
 
             update()
+        },
+
+        positionFromTop(_position, _offset) {
+            if (stackFromBottom) {
+                vm.setStackFromBottom(false)
+                vm.position(_position, _offset)
+                vm.setStackFromBottom(true)
+            } else {
+                vm.position(_position, _offset)
+            }
+        },
+
+        positionSmooth(positionFn, _offset = 0, _stackFromBottom = stackFromBottom) {
+            if (posId) cancelAnimationFrame(posId)
+            if (posResolve) posResolve()
+
+            let prevPosition, prevOffset
+
+            return new Promise(resolve => {
+                posResolve = resolve
+
+                const next = () => {
+                    posId = null
+
+                    if (scrolling || prevPosition === hsPosition && mabs(prevOffset - hsOffset) < 2) {
+                        posResolve = null
+                        resolve()
+
+                        return
+                    }
+
+                    prevPosition = hsPosition
+                    prevOffset = hsOffset
+
+                    posPosition = hsPosition
+                    posOffset = hsOffset
+
+                    const
+                        positionDelta = 48,
+                        //positionDelta = (clientHeight - headerHeight - footerHeight) / 8,
+                        _position = isFunction(positionFn) ? positionFn() : positionFn
+
+                    if (_position < 0 && isFunction(positionFn)) {
+                        posResolve = null
+                        resolve()
+
+                        return
+                    }
+
+                    if (_position >= hsPosition && _position < hsPosition + hs.length) {
+                        let offset = _offset
+                        if (_stackFromBottom) {
+                            const h = hs[_position - hsPosition]
+                            offset = clientHeight - (_position !== maxPosition ? _offset + footerHeight : _offset) - h.height
+                        } else {
+                            offset = _position ? _offset + headerHeight : _offset
+                        }
+
+                        let hOffset = hsOffset
+
+                        for (let i = 0; i < _position - hsPosition; i++)
+                            hOffset += hs[i].height
+
+                        const delta = offset - hOffset
+                        if (mabs(delta) < 2) {
+                            posResolve = null
+                            resolve()
+
+                            return
+                        }
+
+                        posOffset = hsOffset + mmin(mabs(delta), positionDelta) * (delta < 0 ? -1 : 1)
+                    } else {
+                        if (_position < hsPosition) {
+                            posOffset = hsOffset + positionDelta
+                        } else {
+                            posPosition = hsPosition + hs.length - 1
+                            posOffset = hsOffset + hsHeight - hs[hs.length - 1].height - positionDelta
+                        }
+                    }
+
+                    update()
+
+                    posId = requestAnimationFrame(next)
+                }
+
+                next()
+            })
         },
 
         startPosition() {
