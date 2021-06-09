@@ -79,7 +79,7 @@ export function AbstractSource() {
     }
 
     this.detach = _recycler => {
-        if (recycler !== _recycler) return
+        if (_recycler && recycler !== _recycler) return
 
         if (recycler) this.onRecyclerChanged(recycler, null)
         this.recycler = recycler = null
@@ -532,7 +532,7 @@ export function ProxySource(...srcs) {
 
         $on: noop,
         $off: noop,
-        $emit:  (...args) => this.recycler.$emit(...args),
+        $emit: (...args) => this.recycler.$emit(...args),
         $notify: (...args) => this.recycler.$notify(...args),
     })
 

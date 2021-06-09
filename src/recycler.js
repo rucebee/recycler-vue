@@ -184,6 +184,15 @@ function beforeCreate() {
 
             h.position = position
             h.$mount()
+            h._isMounted = true
+
+            if (h.$options.mounted) for (const hook of h.$options.mounted)
+                hook.call(h)
+
+            for (const c of h.$children) if (c.$options.mounted) for (const hook of c.$options.mounted)
+                hook.call(c)
+
+            //vm.callHook(vm, 'mounted')
             //h.$emit = (...args) => vm.$emit.apply(vm, args)
             h._watcher.active = false
 
@@ -192,27 +201,32 @@ function beforeCreate() {
 
             h.style = h.$el.style
 
-            const style = h.style
+            const style = h.style,
+                computedStyle = h.$el.currentStyle || getComputedStyle(h.$el)
+
             style.position = 'absolute'
             style.left = 0
             style.right = 0
-            style.marginTop = 0
-            style.marginBottom = 0
 
             container.append(h.$el)
 
-            const computedStyle = h.$el.currentStyle || getComputedStyle(h.$el)
+            h.marginTop = parseFloat(computedStyle.marginTop) || 0
+            h.marginBottom = parseFloat(computedStyle.marginBottom) || 0
+
+            style.marginTop = 0
+            style.marginBottom = 0
+
             if (computedStyle.maxHeight.endsWith('%')) {
-                h.maxHRatio = (parseInt(computedStyle.maxHeight) || 0) / 100
+                h.maxHRatio = (parseFloat(computedStyle.maxHeight) || 0) / 100
                 style.maxHeight = 'initial'
             }
 
             if (computedStyle.minHeight.endsWith('%')) {
-                h.minHRatio = (parseInt(computedStyle.minHeight) || 0) / 100
+                h.minHRatio = (parseFloat(computedStyle.minHeight) || 0) / 100
 
                 style.minHeight = 'initial'
             } else {
-                h.minHeight = (parseInt(computedStyle.minHeight) || h.$el.offsetHeight)
+                h.minHeight = (parseFloat(computedStyle.minHeight) || h.$el.offsetHeight)
             }
 
             //console.log('create', position)
@@ -230,14 +244,13 @@ function beforeCreate() {
         }
 
         h.id = item?.id
-
-        h.top = 0
-        if (!position) h.top += headerHeight
+        h.top = position ? 0 : headerHeight
 
         if (h.maxHRatio > 0) {
-            if (h.minHRatio) h.minHeight = h.minHRatio * (windowHeight - headerHeight - footerHeight)
+            if (h.minHRatio) h.minHeight = h.minHRatio * (windowHeight - headerHeight - footerHeight) - h.marginBottom
 
-            h.height = mmax(h.minHeight, h.maxHRatio * (windowHeight - headerHeight - footerHeight)) + h.top + (position === maxPosition ? footerHeight : 0)
+            h.height = mmax(h.minHeight, h.maxHRatio * (windowHeight - headerHeight - footerHeight) - h.marginBottom)
+                + h.top + (position === maxPosition ? footerHeight : 0)
 
             //Doing it later:
             //h.style.height = h.height + 'px'
@@ -340,6 +353,20 @@ function beforeCreate() {
 
             return true
         }
+    }
+
+    function hsCleanUp() {
+        while (hs.length) hsPush(hs.pop())
+        hsFlush()
+
+        for (const type in hsCache) {
+            const hsTypeCache = hsCache[type]
+            for (const h of hsTypeCache) {
+                h.$destroy()
+            }
+        }
+
+        hsCache = {}
     }
 
     function _scrollMax() {
@@ -1146,11 +1173,13 @@ function beforeCreate() {
 
         updateCancel()
 
-        for (const h of hs) hsPush(h)
-        hs.length = 0
-        hsBinded.length = 0
-
-        for (const key in hsCache) delete hsCache[key]
+        // for (const h of hs) hsPush(h)
+        // hs.length = 0
+        // hsBinded.length = 0
+        //
+        // for (const key in hsCache) delete hsCache[key]
+        //
+        hsCleanUp()
 
         firstHeight = 0
         lastHeight = 0
@@ -1172,9 +1201,7 @@ function beforeCreate() {
 
                 this.onDatasetChanged()
 
-                while (hs.length) hsPush(hs.pop())
-                hsFlush()
-                hsCache = {}
+                hsCleanUp()
             }
         },
 
