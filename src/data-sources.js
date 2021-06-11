@@ -462,7 +462,7 @@ export function ProxySource(...srcs) {
 
     this.srcs = srcs
 
-    const list = this.list
+    const self = this, list = this.list
     let attached = false, maxCount = null
 
     const recyclerProxy = (src, index) => ({
@@ -534,6 +534,10 @@ export function ProxySource(...srcs) {
         $off: noop,
         $emit: (...args) => this.recycler.$emit(...args),
         $notify: (...args) => this.recycler.$notify(...args),
+
+        get $router() {
+            return self.recycler.$router
+        }
     })
 
     this.setMaxCount = (count = null) => {
