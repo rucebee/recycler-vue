@@ -817,7 +817,7 @@ function beforeCreate() {
             vm.$emit('laidout', hsPosition, hs)
         }
 
-        win.dispatchEvent(scrolledEvent = new Event('scroll'))
+        if (scrolling) win.dispatchEvent(scrolledEvent = new Event('scroll'))
         vm.$emit('scrolled', hsPosition, hs)
     }
 
