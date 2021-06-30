@@ -285,10 +285,11 @@ export function WaterfallSource(query, limit, loadingItem) {
 
         refresh.detach()
     }
+
     this.reset = () => {
         const len = list.length
-        list.length = 0
         this.onRemove(0, len)
+        list.length = 0
 
         if (attached) {
             this.insert(list.length, loadingItem)
@@ -322,8 +323,11 @@ WaterfallSource.prototype = Object.create(AbstractSource.prototype)
 WaterfallSource.prototype.constructor = WaterfallSource
 WaterfallSource.prototype.onRecyclerChanged = subscribeRecyclerLaidout
 
-export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromItem = null, period = 0) {
+export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromItem = null, period = 0, historyItem) {
     AbstractSource.call(this)
+
+    if (!historyItem) historyItem = loadingItem
+    const autoHistory = historyItem.type === 'loading'
 
     let firstIndex = 1, enabled = true, attached = false
 
@@ -337,10 +341,10 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
 
                 if (!firstIndex) {
                     firstIndex = 1
-                    this.insert(0, loadingItem)
+                    this.insert(0, historyItem)
                 }
 
-                console.log('cutHistory', firstIndex, startPos - viewDistance, list[firstIndex])
+                //console.log('cutHistory', firstIndex, startPos - viewDistance, list[firstIndex])
 
                 return true
             }
@@ -348,6 +352,11 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
 
         nextRefresh = new PeriodicRefresh(() => queryNext.call(this, list.length <= firstIndex ? fromItem : list[list.length - 1], limit).then(_list => {
             //console.log('nextRefresh', {list, _list})
+
+            if (!fromItem && firstIndex) {
+                this.remove(0, 1)
+                this.insert(0, historyItem)
+            }
 
             if (_list.length) {
                 if (list.length <= firstIndex) {
@@ -408,6 +417,9 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
     this.empty = () => list.length <= firstIndex
 
     this.refresh = nextRefresh.query
+    this.refreshHistory = () => {
+        historyRefresh.query()
+    }
 
     this._onAttach = () => {
         attached = true
@@ -438,7 +450,7 @@ export function HistorySource(queryNext, queryHistory, limit, loadingItem, fromI
         //console.log('recyclerLaidout', {position, hs, firstIndex, list, fromItem})
 
         if (firstIndex && list.length > firstIndex) {
-            if (position <= viewDistance)
+            if (autoHistory && position <= viewDistance)
                 historyRefresh.query()
 
             if (fromItem && position + hs.length - 1 + viewDistance >= list.length)

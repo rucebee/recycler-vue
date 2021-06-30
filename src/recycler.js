@@ -246,7 +246,39 @@ function beforeCreate() {
         h.id = item?.id
         h.top = position ? 0 : headerHeight
 
-        if (h.maxHRatio > 0) {
+
+        if (h.calcHeight) {
+            h.$el.style.height = ''
+            h.height = h.$el.offsetHeight + h.top
+
+            if (position === maxPosition)
+                h.height += footerHeight
+
+            let _height = clientHeight
+            for (let i = position - 1; i >= 0; i--) {
+                let _h
+
+                if (i >= hsPosition && i < hsPosition + hs.length) {
+                    _h = hs[i - hsPosition]
+                } else {
+                    hsPush(_h = hsPop(i))
+                }
+
+                if (_h.calcHeight) break
+
+                _height -= _h.height
+                if (_height <= h.height) break
+            }
+
+            if (h.height < _height) {
+                h.$el.style.height = (_height - h.top - footerHeight) + 'px'
+
+                if (position !== maxPosition)
+                    _height -= footerHeight
+
+                h.height = _height
+            }
+        } else if (h.maxHRatio > 0) {
             if (h.minHRatio) h.minHeight = h.minHRatio * (windowHeight - headerHeight - footerHeight) - h.marginBottom
 
             h.height = mmax(h.minHeight, h.maxHRatio * (windowHeight - headerHeight - footerHeight) - h.marginBottom)
@@ -268,12 +300,8 @@ function beforeCreate() {
         if (h.height) {
             hsBinded[h.position] = h
 
-            //console.log('hsPush.1', {'h.type': h.type, 'h.position': h.position})
-
             return
         }
-
-        //console.log('hsPush.2', {'h.type': h.type, 'h.position': h.position})
 
         let type = h.type,
             hsTypeCache = hsCache[type]
@@ -1075,7 +1103,7 @@ function beforeCreate() {
                         ? vnode.componentOptions.Ctor
                         : Vue.extend({
                             render(h) {
-                                return vnode
+                                return vm.$slots[type]
                             }
                         }),
                         oldOptions = Ctor.options,
