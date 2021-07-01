@@ -246,7 +246,6 @@ function beforeCreate() {
         h.id = item?.id
         h.top = position ? 0 : headerHeight
 
-
         if (h.calcHeight) {
             h.$el.style.height = ''
             h.height = h.$el.offsetHeight + h.top
