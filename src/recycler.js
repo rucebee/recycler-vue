@@ -1011,9 +1011,11 @@ function beforeCreate() {
     }, onKeyboardFocusOut = ev => {
         console.log('onKeyboardFocusOut', ev.target.nodeName, document.activeElement?.nodeName)
 
-        keyboard = false
-        //doc.style.position = keyboard ? 'fixed' : ''
-        update()
+        if (['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) < 0 && ['TEXTAREA', 'INPUT'].indexOf(document.activeElement?.nodeName) < 0) {
+            keyboard = false
+            //doc.style.position = keyboard ? 'fixed' : ''
+            update()
+        }
     }, onKeyboardBlur = ev => {
         console.log('onKeyboardBlur', ev.target.nodeName, document.activeElement?.nodeName)
 
@@ -1021,7 +1023,7 @@ function beforeCreate() {
         //doc.style.position = keyboard ? 'fixed' : ''
         update()
     }, onKeyboardTouch = ev => {
-        const _keyboard = ['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) > -1
+        const _keyboard = ['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) > -1 || ['TEXTAREA', 'INPUT'].indexOf(document.activeElement?.nodeName) > -1
         if (keyboard !== _keyboard) {
             console.log('onKeyboardTouch', ev.target.nodeName, document.activeElement?.nodeName)
 
