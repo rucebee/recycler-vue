@@ -1,9 +1,8 @@
-import {
-    defaults,
-    mergeWith,
-    findIndex,
-    isFunction,
-} from 'lodash-es'
+import defaults from 'lodash/defaults'
+import mergeWith from 'lodash/mergeWith'
+import findIndex from 'lodash/findIndex'
+import isFunction from 'lodash/isFunction'
+import noop from 'lodash/noop'
 
 import {animate, is_iOS} from '@rucebee/utils'
 

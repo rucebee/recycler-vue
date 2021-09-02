@@ -1,4 +1,6 @@
-import {findIndex, findLast, noop} from 'lodash-es'
+import findIndex from 'lodash/findIndex'
+import findLast from 'lodash/findLast'
+import noop from 'lodash/noop'
 import {timeout} from '@rucebee/utils'
 
 export function AbstractSource() {
