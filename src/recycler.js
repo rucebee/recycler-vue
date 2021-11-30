@@ -4,7 +4,8 @@ import findIndex from 'lodash/findIndex'
 import isFunction from 'lodash/isFunction'
 import noop from 'lodash/noop'
 
-import {animate, is_iOS} from '@rucebee/utils'
+import animate from '@rucebee/utils/src/animate'
+import is_iOS from '@rucebee/utils/src/is_iOS'
 
 const mmin = Math.min,
     mmax = Math.max,

@@ -1,7 +1,7 @@
 import findIndex from 'lodash/findIndex'
 import findLast from 'lodash/findLast'
 import noop from 'lodash/noop'
-import {timeout} from '@rucebee/utils'
+import timeout from '@rucebee/utils/src/timeout'
 
 export function AbstractSource() {
     const list = []
