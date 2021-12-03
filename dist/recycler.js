@@ -1025,11 +1025,11 @@ function beforeCreate() {
   }
 
   function mounted() {
-    var _el$closest;
+    var _ref, _el$closest$parentEle, _el$closest;
 
     var Vue = this.$root.__proto__.constructor;
     el = this.$el;
-    win = (_el$closest = el.closest('.recycler-window')) !== null && _el$closest !== void 0 ? _el$closest : window;
+    win = (_ref = (_el$closest$parentEle = (_el$closest = el.closest('.recycler-layout')) === null || _el$closest === void 0 ? void 0 : _el$closest.parentElement) !== null && _el$closest$parentEle !== void 0 ? _el$closest$parentEle : el.closest('.recycler-window')) !== null && _ref !== void 0 ? _ref : window;
     isWindow = win === window;
     isFixed = false; //isWindow
 
