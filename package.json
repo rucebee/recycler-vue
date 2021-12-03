@@ -1,6 +1,6 @@
 {
   "name": "@rucebee/recycler-vue",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Android RecyclerView port for Vue.js",
   "main": "dist/index.js",
   "directories": {
