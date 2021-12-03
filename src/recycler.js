@@ -1051,7 +1051,7 @@ function beforeCreate() {
         const Vue = this.$root.__proto__.constructor
 
         el = this.$el
-        win = el.closest('.recycler-window') ?? window
+        win = el.closest('.recycler-layout')?.parentElement ?? el.closest('.recycler-window') ?? window
         isWindow = win === window
         isFixed = false//isWindow
         doc = isWindow ? document.documentElement : win

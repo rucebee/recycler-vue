@@ -1,6 +1,6 @@
 {
   "name": "@rucebee/recycler-vue",
-  "version": "1.0.5",
+  "version": "1.0.8",
   "description": "Android RecyclerView port for Vue.js",
   "main": "dist/index.js",
   "directories": {
@@ -32,10 +32,10 @@
     "webpack-dev-server": "^3.11.2"
   },
   "dependencies": {
+    "@rucebee/utils": "^1",
     "lodash": "^4.17.21"
   },
   "peerDependencies": {
-    "@rucebee/util": "^1",
     "vue": "^2.6.12"
   },
   "author": "rucebee",

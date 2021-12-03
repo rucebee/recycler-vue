@@ -5,19 +5,23 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports["default"] = void 0;
 
-var _lodashEs = require("lodash-es");
+var _defaults = _interopRequireDefault(require("lodash/defaults"));
 
-var _utils = require("@rucebee/utils");
+var _mergeWith = _interopRequireDefault(require("lodash/mergeWith"));
 
-function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest(); }
+var _findIndex = _interopRequireDefault(require("lodash/findIndex"));
 
-function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+var _isFunction = _interopRequireDefault(require("lodash/isFunction"));
 
-function _iterableToArrayLimit(arr, i) { if (typeof Symbol === "undefined" || !(Symbol.iterator in Object(arr))) return; var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"] != null) _i["return"](); } finally { if (_d) throw _e; } } return _arr; }
+var _noop = _interopRequireDefault(require("lodash/noop"));
 
-function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+var _animate = _interopRequireDefault(require("@rucebee/utils/src/animate"));
 
-function _createForOfIteratorHelper(o, allowArrayLike) { var it; if (typeof Symbol === "undefined" || o[Symbol.iterator] == null) { if (Array.isArray(o) || (it = _unsupportedIterableToArray(o)) || allowArrayLike && o && typeof o.length === "number") { if (it) o = it; var i = 0; var F = function F() {}; return { s: F, n: function n() { if (i >= o.length) return { done: true }; return { done: false, value: o[i++] }; }, e: function e(_e2) { throw _e2; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var normalCompletion = true, didErr = false, err; return { s: function s() { it = o[Symbol.iterator](); }, n: function n() { var step = it.next(); normalCompletion = step.done; return step; }, e: function e(_e3) { didErr = true; err = _e3; }, f: function f() { try { if (!normalCompletion && it["return"] != null) it["return"](); } finally { if (didErr) throw err; } } }; }
+var _is_iOS = _interopRequireDefault(require("@rucebee/utils/src/is_iOS"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
+
+function _createForOfIteratorHelper(o, allowArrayLike) { var it; if (typeof Symbol === "undefined" || o[Symbol.iterator] == null) { if (Array.isArray(o) || (it = _unsupportedIterableToArray(o)) || allowArrayLike && o && typeof o.length === "number") { if (it) o = it; var i = 0; var F = function F() {}; return { s: F, n: function n() { if (i >= o.length) return { done: true }; return { done: false, value: o[i++] }; }, e: function e(_e) { throw _e; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var normalCompletion = true, didErr = false, err; return { s: function s() { it = o[Symbol.iterator](); }, n: function n() { var step = it.next(); normalCompletion = step.done; return step; }, e: function e(_e2) { didErr = true; err = _e2; }, f: function f() { try { if (!normalCompletion && it["return"] != null) it["return"](); } finally { if (didErr) throw err; } } }; }
 
 function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
 
@@ -32,17 +36,39 @@ var mmin = Math.min,
     NEAR_ONE = 1 - NEAR_ZERO;
 
 function beforeCreate() {
-  var el, win, doc, isWindow, isFixed, wrapper, container, _source, _itemCount, _getItem, _stackFromBottom, _stickToTop, emptySlot;
+  var el,
+      win,
+      doc,
+      isWindow,
+      isFixed,
+      wrapper,
+      container,
+      _source,
+      _itemCount,
+      _getItem,
+      _stackFromBottom2,
+      _stickToTop,
+      emptySlot,
+      hsCache = {};
 
   var vm = this,
       slots = {},
       hs = [],
       hsBinded = [],
-      hsCache = {},
       timeStamp = Date.now() <= new Event('check').timeStamp ? Date.now : performance.now.bind(performance),
       _scroll = function _scroll(top) {
     win.scrollTo(doc.scrollLeft, top);
     scrollTime = timeStamp(); //console.log('_scroll', top, scrollTime)
+  },
+      _windowHeight = function _windowHeight() {
+    var EMPTY_DIV = document.createElement('div');
+    EMPTY_DIV.style.height = '100vh';
+    EMPTY_DIV.style.width = 0;
+    EMPTY_DIV.style.position = 'absolute';
+    document.body.append(EMPTY_DIV);
+    var height = EMPTY_DIV.clientHeight;
+    EMPTY_DIV.remove();
+    return height;
   },
       _bodyHeight = function _bodyHeight() {
     var EMPTY_DIV = document.createElement('div'),
@@ -80,6 +106,7 @@ function beforeCreate() {
       hsOffset = 0,
       hsHeight = 0,
       allShown = true,
+      windowHeight,
       clientHeight,
       clientHeightOld,
       clientHeightEx,
@@ -92,7 +119,11 @@ function beforeCreate() {
       scrollMax,
       scrollRatio,
       maxOffset,
-      scrollTime = 0;
+      scrollTime = 0,
+      posId,
+      posResolve,
+      posPosition,
+      posOffset;
 
   var update = function update() {
     if (updateId) cancelAnimationFrame(updateId);
@@ -126,8 +157,8 @@ function beforeCreate() {
     if (!hsTypeCache) hsCache[type] = hsTypeCache = [];
 
     if (item !== null && item !== void 0 && item.id) {
-      var index = (0, _lodashEs.findIndex)(hsTypeCache, ['id', item.id]);
-      if (index < 0) index = (0, _lodashEs.findIndex)(hsTypeCache, ['id', undefined]);
+      var index = (0, _findIndex["default"])(hsTypeCache, ['id', item.id]);
+      if (index < 0) index = (0, _findIndex["default"])(hsTypeCache, ['id', undefined]);
 
       if (index > -1) {
         h = hsTypeCache[index];
@@ -141,26 +172,82 @@ function beforeCreate() {
       var factory = slots[type] || emptySlot;
       h = factory();
       h.position = position;
-      h.$mount(); //h.$emit = (...args) => vm.$emit.apply(vm, args)
+      h.$mount();
+      h._isMounted = true;
+
+      if (h.$options.mounted) {
+        var _iterator = _createForOfIteratorHelper(h.$options.mounted),
+            _step;
+
+        try {
+          for (_iterator.s(); !(_step = _iterator.n()).done;) {
+            var hook = _step.value;
+            hook.call(h);
+          }
+        } catch (err) {
+          _iterator.e(err);
+        } finally {
+          _iterator.f();
+        }
+      }
+
+      var _iterator2 = _createForOfIteratorHelper(h.$children),
+          _step2;
+
+      try {
+        for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+          var c = _step2.value;
+
+          if (c.$options.mounted) {
+            var _iterator3 = _createForOfIteratorHelper(c.$options.mounted),
+                _step3;
+
+            try {
+              for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
+                var _hook = _step3.value;
+
+                _hook.call(c);
+              }
+            } catch (err) {
+              _iterator3.e(err);
+            } finally {
+              _iterator3.f();
+            }
+          }
+        } //vm.callHook(vm, 'mounted')
+        //h.$emit = (...args) => vm.$emit.apply(vm, args)
+
+      } catch (err) {
+        _iterator2.e(err);
+      } finally {
+        _iterator2.f();
+      }
 
       h._watcher.active = false;
       h.position = -1;
       h.position = position;
       h.style = h.$el.style;
-      var style = h.style;
+      var style = h.style,
+          computedStyle = h.$el.currentStyle || getComputedStyle(h.$el);
       style.position = 'absolute';
       style.left = 0;
       style.right = 0;
+      container.append(h.$el);
+      h.marginTop = parseFloat(computedStyle.marginTop) || 0;
+      h.marginBottom = parseFloat(computedStyle.marginBottom) || 0;
       style.marginTop = 0;
       style.marginBottom = 0;
-      container.append(h.$el);
-      var computedStyle = h.$el.currentStyle || getComputedStyle(h.$el);
 
       if (computedStyle.maxHeight.endsWith('%')) {
-        h.maxHeight = (parseInt(computedStyle.maxHeight) || 0) / 100;
-        h.minHeight = parseInt(computedStyle.minHeight) || h.$el.offsetHeight;
+        h.maxHRatio = (parseFloat(computedStyle.maxHeight) || 0) / 100;
         style.maxHeight = 'initial';
+      }
+
+      if (computedStyle.minHeight.endsWith('%')) {
+        h.minHRatio = (parseFloat(computedStyle.minHeight) || 0) / 100;
         style.minHeight = 'initial';
+      } else {
+        h.minHeight = parseFloat(computedStyle.minHeight) || h.$el.offsetHeight;
       } //console.log('create', position)
 
     } else {
@@ -174,11 +261,36 @@ function beforeCreate() {
     }
 
     h.id = item === null || item === void 0 ? void 0 : item.id;
-    h.top = 0;
-    if (!position) h.top += headerHeight;
+    h.top = position ? 0 : headerHeight;
 
-    if (h.maxHeight > 0) {
-      h.height = mmax(h.minHeight, h.maxHeight * clientHeight) + h.top + (position === maxPosition ? footerHeight : 0); //Doing it later:
+    if (h.calcHeight) {
+      h.$el.style.height = '';
+      h.height = h.$el.offsetHeight + h.top;
+      if (position === maxPosition) h.height += footerHeight;
+      var _height = clientHeight;
+
+      for (var i = position - 1; i >= 0; i--) {
+        var _h = void 0;
+
+        if (i >= hsPosition && i < hsPosition + hs.length) {
+          _h = hs[i - hsPosition];
+        } else {
+          hsPush(_h = hsPop(i));
+        }
+
+        if (_h.calcHeight) break;
+        _height -= _h.height;
+        if (_height <= h.height) break;
+      }
+
+      if (h.height < _height) {
+        h.$el.style.height = _height - h.top - footerHeight + 'px';
+        if (position !== maxPosition) _height -= footerHeight;
+        h.height = _height;
+      }
+    } else if (h.maxHRatio > 0) {
+      if (h.minHRatio) h.minHeight = h.minHRatio * (windowHeight - headerHeight - footerHeight) - h.marginBottom;
+      h.height = mmax(h.minHeight, h.maxHRatio * (windowHeight - headerHeight - footerHeight) - h.marginBottom) + h.top + (position === maxPosition ? footerHeight : 0); //Doing it later:
       //h.style.height = h.height + 'px'
     } else {
       h.height = h.$el.offsetHeight + h.top;
@@ -218,18 +330,22 @@ function beforeCreate() {
     for (var type in hsCache) {
       var hsTypeCache = hsCache[type];
 
-      var _iterator = _createForOfIteratorHelper(hsTypeCache),
-          _step;
+      var _iterator4 = _createForOfIteratorHelper(hsTypeCache),
+          _step4;
 
       try {
-        for (_iterator.s(); !(_step = _iterator.n()).done;) {
-          var _h = _step.value;
-          if (_h.$el.parentElement) _h.$el.remove();
+        for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
+          var _h2 = _step4.value;
+
+          if (_h2.$el.parentElement) {
+            //console.log('hsFlush.remove', {'h.type': h.type, 'h.position': h.position})
+            _h2.$el.remove();
+          }
         }
       } catch (err) {
-        _iterator.e(err);
+        _iterator4.e(err);
       } finally {
-        _iterator.f();
+        _iterator4.f();
       }
     }
   }
@@ -239,18 +355,18 @@ function beforeCreate() {
       if (_position <= 1) firstHeight = 0;
       lastHeight = 0;
 
-      var _iterator2 = _createForOfIteratorHelper(hs),
-          _step2;
+      var _iterator5 = _createForOfIteratorHelper(hs),
+          _step5;
 
       try {
-        for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-          var h = _step2.value;
+        for (_iterator5.s(); !(_step5 = _iterator5.n()).done;) {
+          var h = _step5.value;
           h.height = 0;
         }
       } catch (err) {
-        _iterator2.e(err);
+        _iterator5.e(err);
       } finally {
-        _iterator2.f();
+        _iterator5.f();
       }
 
       return true;
@@ -281,29 +397,57 @@ function beforeCreate() {
     }
   }
 
+  function hsCleanUp() {
+    while (hs.length) {
+      hsPush(hs.pop());
+    }
+
+    hsFlush();
+
+    for (var type in hsCache) {
+      var hsTypeCache = hsCache[type];
+
+      var _iterator6 = _createForOfIteratorHelper(hsTypeCache),
+          _step6;
+
+      try {
+        for (_iterator6.s(); !(_step6 = _iterator6.n()).done;) {
+          var h = _step6.value;
+          h.$destroy();
+        }
+      } catch (err) {
+        _iterator6.e(err);
+      } finally {
+        _iterator6.f();
+      }
+    }
+
+    hsCache = {};
+  }
+
   function _scrollMax() {
     var fluidCount = 0,
         fluidHeight = 0;
 
-    var _iterator3 = _createForOfIteratorHelper(hs),
-        _step3;
+    var _iterator7 = _createForOfIteratorHelper(hs),
+        _step7;
 
     try {
-      for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
-        var h = _step3.value;
+      for (_iterator7.s(); !(_step7 = _iterator7.n()).done;) {
+        var h = _step7.value;
 
-        if (h.maxHeight) {
+        if (h.maxHRatio) {
           fluidCount++;
           fluidHeight += h.height;
         }
       }
     } catch (err) {
-      _iterator3.e(err);
+      _iterator7.e(err);
     } finally {
-      _iterator3.f();
+      _iterator7.f();
     }
 
-    var height = mround(mmin(9 * clientHeight, itemCount === fluidCount ? fluidHeight : hs.length > fluidCount ? (hsHeight - fluidHeight) * itemCount / (hs.length - fluidCount) + fluidHeight : 2 * clientHeight)); //console.log({height, scrollHeight, clientHeight})
+    var height = hs.length === itemCount ? hsHeight : mround(mmin(9 * clientHeight, itemCount === fluidCount ? fluidHeight : hs.length > fluidCount ? (hsHeight - fluidHeight) * itemCount / (hs.length - fluidCount) + fluidHeight : 2 * clientHeight)); //console.log({height, scrollHeight, clientHeight})
 
     if (scrollHeight !== height) {
       scrollHeight = height;
@@ -355,7 +499,7 @@ function beforeCreate() {
     if (scrolling && !keyboard) {
       scrolled = Date.now();
 
-      if (touching) {
+      if (touched) {
         hs.push(h = hsPop(hsPosition = touchPosition));
         hsOffset = touchOffset - scrollTop + touchTop;
       } else {
@@ -363,10 +507,14 @@ function beforeCreate() {
         var positionReal = maxPosition * scrollRatio;
         hs.push(h = hsPop(hsPosition = mfloor(positionReal)));
         hsOffset = scrollRatio * maxOffset - positionReal % 1 * h.height;
-      } //console.log('scrolling', {hsPosition, hsOffset, scrollTop, scrollMax})
+      } // console.log('scrolling', {hsPosition, hsOffset, scrollTop, scrollMax, touching})
 
+    } else if (posId) {
+      hsPosition = posPosition;
+      hsOffset = posOffset;
+      hs.push(h = hsPop(hsPosition));
     } else {
-      if (_stackFromBottom) {
+      if (_stackFromBottom2) {
         if (_position2 > maxPosition) {
           hsPosition = maxPosition;
           hs.push(h = hsPop(hsPosition));
@@ -385,7 +533,7 @@ function beforeCreate() {
           hs.push(h = hsPop(hsPosition));
           hsOffset = offset;
         }
-      } //console.log('->', {hsPosition, hsOffset, position, offset})
+      } // console.log({'-> hsPosition': hsPosition, hsOffset, position, offset, clientHeight})
 
     }
 
@@ -427,7 +575,7 @@ function beforeCreate() {
     allShown = hs.length === itemCount && hsHeight < clientHeightEx + 1; //if (!scrolling && !scrolled) {
 
     if (!scrolling) {
-      if (_stackFromBottom) {
+      if (_stackFromBottom2) {
         if (bottomSpace > 0) {
           up += bottomSpace;
           hsOffset = up;
@@ -453,14 +601,14 @@ function beforeCreate() {
         if (!scrolling) {
           _scrollMax();
 
-          if (!_stackFromBottom || _stickToTop) {
+          if (!_stackFromBottom2 || _stickToTop) {
             if (Math.abs(scrollTop + hsOffset) >= 1) _scroll(scrollTop = -hsOffset);
           }
         } else {
           hsOffset = -mround(scrollMax * hsOffset / (clientHeight - hsHeight));
         }
 
-        if (!_stackFromBottom || _stickToTop) {
+        if (!_stackFromBottom2 || _stickToTop) {
           up = -scrollTop;
         }
       } else if (!scrolling) {
@@ -506,20 +654,43 @@ function beforeCreate() {
           }
 
           hOffset += hh;
-        } //console.log(stat)
+        }
+
+        var _scrollRatio = mmax(0, mmin(1, scrollMax > 0 ? newScrollTop / scrollMax : 0)),
+            _positionReal = maxPosition * _scrollRatio,
+            _hsPosition = mfloor(_positionReal); // if (_hsPosition >= hsPosition && _hsPosition < hsPosition + hs.length) {
+        //     const _h = hs[_hsPosition - hsPosition],
+        //         _hsOffset = _scrollRatio * maxOffset - (_positionReal % 1) * _h.height
+        //
+        //     let a = ''
+        //
+        //     if (_hsPosition - 1 >= hsPosition)
+        //         a += (_hsPosition - 1) + ' - ' + (_hsOffset - hs[_hsPosition - hsPosition - 1].height) + ', '
+        //
+        //     a += _hsPosition + ' - ' + _hsOffset + ', '
+        //
+        //     if (_hsPosition + 1 < hsPosition + hs.length)
+        //         a += (_hsPosition + 1) + ' - ' + (_hsOffset + hs[_hsPosition - hsPosition].height) + ', '
+        //
+        //     console.log({hsPosition, hsOffset, a})
+        // } else {
+        //     console.log({hsPosition, _hsPosition, hsOffset})
+        //
+        // }
+        //console.log(stat)
 
 
-        if (scrolled && touching) {
-          var scrollDelta = 0; //console.log({scrollClue, scrollTop, scrollMax,})
+        if (scrolled && touched) {
+          var scrollDelta = 0; //console.log({scrollClue, scrollTop, scrollMax})
 
           if (scrollClue < 0) {
-            scrollDelta = !hsPosition ? hsOffset : -newScrollTop; //console.log({scrollDelta,})
+            scrollDelta = !hsPosition ? hsOffset : -newScrollTop; //console.log({scrollDelta})
 
             _scroll(scrollTop = newScrollTop = 0);
           } else if (scrollClue > 0) {
-            var hsOffsetOld = hsOffset;
-            hsOffset -= clientHeight - clientHeightOld;
-            scrollDelta = hsPosition + hs.length - 1 === maxPosition ? hsOffset - (clientHeight - hsHeight) : scrollMax - newScrollTop; //console.log({scrollDelta, delta: clientHeight - clientHeightOld, hsOffset, hsOffsetOld,})
+            var hsOffsetOld = hsOffset; //hsOffset -= clientHeight - clientHeightOld
+
+            scrollDelta = hsPosition + hs.length - 1 === maxPosition ? hsOffset - (clientHeight - hsHeight) : scrollMax - newScrollTop; //console.log({scrollDelta, delta: clientHeight - clientHeightOld, hsOffset, hsOffsetOld})
 
             _scroll(scrollTop = newScrollTop = scrollMax);
           }
@@ -528,12 +699,8 @@ function beforeCreate() {
             clearScrolled = false;
             var r = mmax(0, mmin(1, (Date.now() - scrolled) / 2000)),
                 _hsOffsetOld = hsOffset;
-            hsOffset -= r * scrollDelta;
-            console.log({
-              r: r,
-              hsOffsetOld: _hsOffsetOld,
-              hsOffset: hsOffset
-            });
+            hsOffset -= r * scrollDelta; //console.log({r, hsOffsetOld, hsOffset})
+
             update();
           } else {
             if (scrollClue < 0) {
@@ -558,20 +725,23 @@ function beforeCreate() {
     if (!scrolling) clientHeightOld = clientHeight; // console.log(keyboardAnchor.getBoundingClientRect().bottom, clientHeight)
 
     var scrollOffset = isFixed ? 0 : keyboard ? scrollTop + keyboardAnchor.getBoundingClientRect().bottom - clientHeight : scrollTop;
-    down = up;
+    down = up = hsOffset; //down = hsOffset + hsHeight
+
     var j = 0,
         fluidCheck = 0;
 
     while (j < hs.length) {
-      if (down > clientHeight) {
-        hsPush(hs.pop());
+      if (down > clientHeight - footerHeight) {
+        h = hs.pop();
+        hsHeight -= h.height;
+        hsPush(h);
         continue;
       }
 
       h = hs[j]; //h.style.zIndex = j
       //h.style.order = j
 
-      if (h.maxHeight) {
+      if (h.maxHRatio) {
         var top = down,
             height = h.height - h.top;
         if (hsPosition + j === maxPosition) height -= footerHeight;
@@ -582,7 +752,7 @@ function beforeCreate() {
             height -= top - down;
           }
 
-          if (j === hs.length - 1 && down + height > clientHeight) height = mmax(h.minHeight, clientHeight - down);
+          if (j === hs.length - 1 && down + height > clientHeight) height = mmax(h.minHeight, windowHeight - headerHeight - footerHeight - down);
         }
 
         h.style.top = scrollOffset + top + h.top + 'px';
@@ -595,9 +765,10 @@ function beforeCreate() {
 
       down += h.height;
 
-      if (down < 0) {
+      if (down < headerHeight) {
         hsPosition++;
         hsOffset += h.height;
+        hsHeight -= h.height;
         hs.splice(j, 1);
         hsPush(h);
       } else {
@@ -605,7 +776,7 @@ function beforeCreate() {
       }
     }
 
-    if (scrolling && touching) {
+    if (scrolling && touched) {
       touchPosition = hsPosition;
       touchOffset = hsOffset;
       touchTop = scrollTop;
@@ -613,19 +784,18 @@ function beforeCreate() {
 
     hsFlush();
 
-    if (_stackFromBottom) {
-      // position = maxPosition - hsPosition - hs.length + 1
+    if (_stackFromBottom2) {
       _position2 = hsPosition + hs.length - 1;
       offset = clientHeight - hsHeight - hsOffset;
 
       if (fluidCheck === 3) {
         for (i = hs.length - 1; i >= 0; i--) {
-          if (hs[i].maxHeight) {
+          if (hs[i].maxHRatio) {
             _position2--;
             offset += hs[i].height;
           } else break;
         }
-      } else if (fluidCheck === 2) {
+      } else if (fluidCheck === 2 && hs.length === itemCount) {
         _position2 = -1;
       }
     } else {
@@ -633,27 +803,33 @@ function beforeCreate() {
       offset = hsOffset;
 
       if (fluidCheck === 3) {
-        var _iterator4 = _createForOfIteratorHelper(hs),
-            _step4;
+        var _iterator8 = _createForOfIteratorHelper(hs),
+            _step8;
 
         try {
-          for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
-            h = _step4.value;
+          for (_iterator8.s(); !(_step8 = _iterator8.n()).done;) {
+            h = _step8.value;
 
-            if (h.maxHeight) {
+            if (h.maxHRatio) {
               _position2++;
               offset += h.height;
             } else break;
           }
         } catch (err) {
-          _iterator4.e(err);
+          _iterator8.e(err);
         } finally {
-          _iterator4.f();
+          _iterator8.f();
         }
-      } else if (fluidCheck === 2) {
+      } else if (fluidCheck === 2 && hs.length === itemCount) {
         _position2 = -1;
       }
-    } //console.log('<-', {hsPosition, hsOffset, position, offset, maxPosition})
+    } // console.log({
+    //     '<- hsPosition': hsPosition,
+    //     hsOffset,
+    //     position,
+    //     offset,
+    //     clientHeight,
+    // })
 
 
     if (!scrolling && clearScrolled) {
@@ -661,7 +837,8 @@ function beforeCreate() {
       vm.$emit('laidout', hsPosition, hs);
     }
 
-    win.dispatchEvent(scrolledEvent = new Event('scroll'));
+    if (scrolling) win.dispatchEvent(scrolledEvent = new Event('scroll'));
+    vm.$emit('scrolled', hsPosition, hs);
   }
 
   var scrolled = 0,
@@ -669,6 +846,7 @@ function beforeCreate() {
       scrolledEvent = null,
       scrollStarted = 0,
       scrollEndTimeout,
+      touched = false,
       touching = false,
       touchTop,
       touchPosition,
@@ -680,6 +858,7 @@ function beforeCreate() {
   var onResize = function onResize() {
     hsInvalidate(0, itemCount);
     clientHeight = _clientHeight();
+    windowHeight = isWindow ? _windowHeight() : clientHeight;
     clientHeightEx = mmax(parseInt(doc.style.minHeight) || 0, clientHeight);
     scrollMax = mmax(0, doc.scrollHeight - clientHeight);
     headerHeight = wrapper.offsetTop - doc.offsetTop;
@@ -703,7 +882,9 @@ function beforeCreate() {
     if (scrolledEvent === ev) {
       scrolledEvent = null;
       return;
-    } // console.log('onScroll', ev.type, ev.timeStamp, {
+    } // console.log('onScroll', {
+    //     type: ev.type,
+    //     timeStamp: ev.timeStamp,
     //     scrollTime,
     //     scrollStarted,
     //     scrollTop,
@@ -721,7 +902,7 @@ function beforeCreate() {
   },
       onScrollContinue = function onScrollContinue(ev) {
     //console.log('onScrollContinue', ev?.type)
-    if (!scrollStarted) scrollStarted = 1;
+    if (!scrollStarted && (keyboard || touching || !touched)) scrollStarted = 1;
 
     if (scrollStarted > 0 && ev && (ev.type === 'mousedown' || ev.type === 'touchstart')) {
       scrollStarted = -1; //win.addEventListener('mousemove', onScrollContinue)
@@ -748,8 +929,7 @@ function beforeCreate() {
     }
 
     if (scrolling) {
-      scrolling = false; //touching = false
-      //console.log('onScrollEnd', ev, scrollTop, scrollMax)
+      scrolling = false; //console.log('onScrollEnd', ev, scrollTop, scrollMax)
 
       update();
     }
@@ -765,8 +945,8 @@ function beforeCreate() {
     touchTop = doc.scrollTop;
     touchPosition = hsPosition;
     touchOffset = hsOffset;
-    win.addEventListener('touchend', onTouchEnd); // just detect touching
-
+    win.addEventListener('touchend', onTouchEnd);
+    touched = true;
     touching = true;
   },
       onTouchEnd = function onTouchEnd(ev) {
@@ -780,11 +960,11 @@ function beforeCreate() {
     //     touchEnd = 0
     // }
     //console.log('onTouchEnd', {touchEnd, scrollTop, scrollMax})
-    // if (touching) {
-    //     touching = false
-    //
-    //     update()
-    // }
+
+    if (touching) {
+      touching = false;
+      update();
+    }
   },
       onKeyboardFocus = function onKeyboardFocus(ev) {
     var _document$activeEleme, _document$activeEleme2;
@@ -796,31 +976,40 @@ function beforeCreate() {
     //     hsOffset,
     // }, keyboardAnchor, keyboardAnchor.getBoundingClientRect())
 
-    keyboard = ev.target.nodeName === ((_document$activeEleme2 = document.activeElement) === null || _document$activeEleme2 === void 0 ? void 0 : _document$activeEleme2.nodeName);
+    keyboard = ev.target.nodeName === ((_document$activeEleme2 = document.activeElement) === null || _document$activeEleme2 === void 0 ? void 0 : _document$activeEleme2.nodeName); //doc.style.position = keyboard ? 'fixed' : ''
+
     update();
   },
       onKeyboardFocusOut = function onKeyboardFocusOut(ev) {
-    var _document$activeEleme3;
+    var _document$activeEleme3, _document$activeEleme4;
 
     console.log('onKeyboardFocusOut', ev.target.nodeName, (_document$activeEleme3 = document.activeElement) === null || _document$activeEleme3 === void 0 ? void 0 : _document$activeEleme3.nodeName);
-    keyboard = false;
-    update();
+
+    if (['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) < 0 && ['TEXTAREA', 'INPUT'].indexOf((_document$activeEleme4 = document.activeElement) === null || _document$activeEleme4 === void 0 ? void 0 : _document$activeEleme4.nodeName) < 0) {
+      keyboard = false; //doc.style.position = keyboard ? 'fixed' : ''
+
+      update();
+    }
   },
       onKeyboardBlur = function onKeyboardBlur(ev) {
-    var _document$activeEleme4;
+    var _document$activeEleme5;
 
-    console.log('onKeyboardBlur', ev.target.nodeName, (_document$activeEleme4 = document.activeElement) === null || _document$activeEleme4 === void 0 ? void 0 : _document$activeEleme4.nodeName);
-    keyboard = false;
+    console.log('onKeyboardBlur', ev.target.nodeName, (_document$activeEleme5 = document.activeElement) === null || _document$activeEleme5 === void 0 ? void 0 : _document$activeEleme5.nodeName);
+    keyboard = false; //doc.style.position = keyboard ? 'fixed' : ''
+
     update();
   },
       onKeyboardTouch = function onKeyboardTouch(ev) {
-    var _keyboard = ['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) > -1;
+    var _document$activeEleme6;
+
+    var _keyboard = ['TEXTAREA', 'INPUT'].indexOf(ev.target.nodeName) > -1 || ['TEXTAREA', 'INPUT'].indexOf((_document$activeEleme6 = document.activeElement) === null || _document$activeEleme6 === void 0 ? void 0 : _document$activeEleme6.nodeName) > -1;
 
     if (keyboard !== _keyboard) {
-      var _document$activeEleme5;
+      var _document$activeEleme7;
 
-      console.log('onKeyboardTouch', ev.target.nodeName, (_document$activeEleme5 = document.activeElement) === null || _document$activeEleme5 === void 0 ? void 0 : _document$activeEleme5.nodeName);
-      keyboard = _keyboard;
+      console.log('onKeyboardTouch', ev.target.nodeName, (_document$activeEleme7 = document.activeElement) === null || _document$activeEleme7 === void 0 ? void 0 : _document$activeEleme7.nodeName);
+      keyboard = _keyboard; //doc.style.position = keyboard ? 'fixed' : ''
+
       update();
     }
   };
@@ -829,7 +1018,7 @@ function beforeCreate() {
     _source = this.source;
     _itemCount = _source.itemCount;
     _getItem = _source.getItem;
-    _stackFromBottom = this.stackFromBottom;
+    _stackFromBottom2 = this.stackFromBottom;
     _stickToTop = this.stickToTop;
     itemCount = _itemCount();
     maxPosition = itemCount - 1;
@@ -838,6 +1027,7 @@ function beforeCreate() {
   function mounted() {
     var _el$closest;
 
+    var Vue = this.$root.__proto__.constructor;
     el = this.$el;
     win = (_el$closest = el.closest('.recycler-window')) !== null && _el$closest !== void 0 ? _el$closest : window;
     isWindow = win === window;
@@ -866,7 +1056,7 @@ function beforeCreate() {
     win.addEventListener('mousedown', onScrollContinue, true);
     win.addEventListener('touchstart', onTouchStart, true);
 
-    if ((0, _utils.is_iOS)()) {
+    if ((0, _is_iOS["default"])()) {
       addEventListener('focus', onKeyboardFocus, true);
       addEventListener('blur', onKeyboardBlur, true);
       addEventListener('touchstart', onKeyboardTouch, true);
@@ -885,16 +1075,20 @@ function beforeCreate() {
     win.recycler = this;
 
     loop: for (var type in vm.$slots) {
-      var _iterator5 = _createForOfIteratorHelper(vm.$slots[type]),
-          _step5;
+      var _iterator9 = _createForOfIteratorHelper(vm.$slots[type]),
+          _step9;
 
       try {
-        for (_iterator5.s(); !(_step5 = _iterator5.n()).done;) {
-          var vnode = _step5.value;
-          if (!vnode || !vnode.componentOptions) continue;
+        for (_iterator9.s(); !(_step9 = _iterator9.n()).done;) {
+          var vnode = _step9.value;
+          if (!vnode || !vnode.tag) continue;
 
           (function (_type, vnode) {
-            var Ctor = vnode.componentOptions.Ctor,
+            var Ctor = vnode.componentOptions ? vnode.componentOptions.Ctor : Vue.extend({
+              render: function render(h) {
+                return vm.$slots[_type];
+              }
+            }),
                 oldOptions = Ctor.options,
                 options = Object.assign({}, oldOptions),
                 dataFn = options.data;
@@ -905,7 +1099,7 @@ function beforeCreate() {
               return data;
             };
 
-            options.computed = (0, _lodashEs.defaults)({
+            options.computed = (0, _defaults["default"])({
               type: function type() {
                 return _type;
               },
@@ -918,28 +1112,39 @@ function beforeCreate() {
             }, oldOptions.computed);
             delete options.computed.position;
 
-            slots[_type] = function () {
-              Ctor.options = options;
-              var o = new Ctor({
-                _isComponent: true,
-                _parentVnode: vnode,
-                parent: vm
-              });
-              Ctor.options = oldOptions;
-              return o;
-            };
+            if (vnode.componentOptions) {
+              slots[_type] = function () {
+                Ctor.options = options;
+                var o = new Ctor({
+                  _isComponent: true,
+                  _parentVnode: vnode,
+                  parent: vm
+                });
+                Ctor.options = oldOptions;
+                return o;
+              };
+            } else {
+              slots[_type] = function () {
+                Ctor.options = options;
+                var o = new Ctor({
+                  // _isComponent: true,
+                  // _parentVnode: vnode,
+                  parent: vm
+                });
+                Ctor.options = oldOptions;
+                return o;
+              };
+            }
           })(type, vnode);
 
           continue loop;
         }
       } catch (err) {
-        _iterator5.e(err);
+        _iterator9.e(err);
       } finally {
-        _iterator5.f();
+        _iterator9.f();
       }
     }
-
-    var Vue = this.$root.__proto__.constructor;
 
     emptySlot = function emptySlot() {
       return new Vue({
@@ -967,56 +1172,55 @@ function beforeCreate() {
     removeEventListener('touchstart', onKeyboardTouch, true);
     removeEventListener('focusout', onKeyboardFocusOut, true);
     if (keyboardAnchor) keyboardAnchor.remove();
+
+    if (keyboard) {
+      keyboard = false; //doc.style.position = keyboard ? 'fixed' : ''
+    }
+
     scrolling = false;
     onScrollEnd();
     win.removeEventListener('touchstart', onTouchStart, true);
     win.removeEventListener('touchend', onTouchEnd, true);
+    touched = false;
     touching = false;
     onTouchEnd();
-    updateCancel();
+    updateCancel(); // for (const h of hs) hsPush(h)
+    // hs.length = 0
+    // hsBinded.length = 0
+    //
+    // for (const key in hsCache) delete hsCache[key]
+    //
 
-    var _iterator6 = _createForOfIteratorHelper(hs),
-        _step6;
-
-    try {
-      for (_iterator6.s(); !(_step6 = _iterator6.n()).done;) {
-        var h = _step6.value;
-        hsPush(h);
-      }
-    } catch (err) {
-      _iterator6.e(err);
-    } finally {
-      _iterator6.f();
-    }
-
-    hs.length = 0;
-    hsBinded.length = 0;
-
-    for (var key in hsCache) {
-      delete hsCache[key];
-    }
-
+    hsCleanUp();
     firstHeight = 0;
     lastHeight = 0;
     scrollHeight = 0;
   }
 
-  (0, _lodashEs.mergeWith)(this.$options, {
+  (0, _mergeWith["default"])(this.$options, {
     created: created,
     mounted: mounted,
     beforeDestroy: beforeDestroy
   }, function (objValue, srcValue) {
     return Array.isArray(objValue) ? objValue.concat([srcValue]) : objValue ? undefined : [srcValue];
   });
-  this.$options.watch = (0, _lodashEs.defaults)({
+  this.$options.watch = (0, _defaults["default"])({
     source: function source(newValue) {
-      _source = newValue;
-      _itemCount = _source.itemCount;
-      _getItem = _source.getItem;
-      this.onDatasetChanged();
+      if (_source !== newValue) {
+        _source.detach(vm);
+
+        _source = newValue;
+
+        _source.attach(vm);
+
+        _itemCount = _source.itemCount;
+        _getItem = _source.getItem;
+        this.onDatasetChanged();
+        hsCleanUp();
+      }
     },
     stackFromBottom: function stackFromBottom(newValue) {
-      _stackFromBottom = newValue;
+      _stackFromBottom2 = newValue;
       this.onDatasetChanged();
     },
     stickToTop: function stickToTop(newValue) {
@@ -1024,7 +1228,7 @@ function beforeCreate() {
       this.onDatasetChanged();
     }
   }, this.$options.watch);
-  this.$options.methods = (0, _lodashEs.defaults)({
+  this.$options.methods = (0, _defaults["default"])({
     onDatasetChanged: function onDatasetChanged() {
       //console.log('update', {hsPosition, position, _position, count})
       if (hsInvalidate(0, _itemCount())) update();
@@ -1034,80 +1238,224 @@ function beforeCreate() {
       if (hsInvalidate(_position, count)) update();
     },
     onInsert: function onInsert(_position, count) {
-      console.log('insert', {
-        hsPosition: hsPosition,
-        position: _position2,
-        _position: _position,
-        count: count
-      });
-
+      // console.log('insert', {
+      //     hsPosition,
+      //     position,
+      //     offset,
+      //     _position,
+      //     count,
+      //     stackFromBottom,
+      //     item: _getItem(_position)
+      // })
       if (_position2 === -1) {
-        if (_stackFromBottom && !_stickToTop) {
-          _position2 = maxPosition + count - 1;
-          offset = footerHeight;
+        if (_stackFromBottom2) {
+          _position2 = maxPosition + count;
+          offset = 0;
         } else {
           _position2 = 0;
           offset = 0;
         }
-      } else if (_stackFromBottom && _position >= maxPosition && _position2 === maxPosition && offset > footerHeight - lastHeight / 2) {
-        _position2 = maxPosition + count - 1;
-        offset = footerHeight;
+      } else if (_stackFromBottom2 && _position >= maxPosition && _position2 === maxPosition && -offset < (footerHeight + lastHeight) / 2) {
+        _position2 = maxPosition + count;
+        offset = 0;
       } else {
-        if (_position <= _position2) _position2 += count;
+        if (_position < _position2) _position2 += count;
       }
 
-      if (touching && _position <= touchPosition) touchPosition += count;
+      if (touched && _position < touchPosition) touchPosition += count;
+      if (posId && _position < posPosition) posPosition += count;
 
       for (var i = mmax(0, _position - hsPosition); i < hs.length; i++) {
         hs[i].position += count;
       }
 
-      if (hsInvalidate(_position, count)) update();
+      if (hsInvalidate(_position, count)) update(); // console.log('inserted', {hsPosition, position, offset, item: _getItem(_position)})
     },
     onRemove: function onRemove(_position, count) {
-      console.log('remove', {
-        hsPosition: hsPosition,
-        position: _position2,
-        _position: _position,
-        count: count
-      });
+      //console.log('remove', {hsPosition, position, _position, count, offset, stackFromBottom})
       var invalid = hsInvalidate(_position, count);
       if (!_itemCount()) _position2 = -1;else {
         if (_position < _position2) _position2 -= mmin(count, _position2 - _position + 1);
-        if (touching && _position <= touchPosition) touchPosition -= mmin(count, touchPosition - _position + 1);
+        if (touched && _position <= touchPosition) touchPosition -= mmin(count, touchPosition - _position + 1);
+        if (posId && _position <= posPosition) posPosition -= mmin(count, posPosition - _position + 1);
       }
 
       if (invalid) {
         for (var i = mmax(0, _position + count - hsPosition); i < hs.length; i++) {
           hs[i].position -= count;
-        }
+        } // for (let i = mmax(0, _position - hsPosition), len = mmin(hs.length, _position - hsPosition + count); i < len; i++) {
+        //     const [h] = hs.splice(i, 1)
+        //     len--
+        //     i--
+        //
+        //     //hsHeight -= h.height
+        //     h.height = 0
+        //     hsPush(h)
+        //     //h.$el.remove()
+        // }
 
-        for (var _i2 = mmax(0, _position - hsPosition), len = mmin(hs.length, _position - hsPosition + count); _i2 < len; _i2++) {
-          var _hs$splice = hs.splice(_i2, 1),
-              _hs$splice2 = _slicedToArray(_hs$splice, 1),
-              h = _hs$splice2[0];
-
-          len--;
-          _i2--;
-          h.height = 0;
-          hsPush(h); //h.$el.remove()
-        }
 
         update();
-      }
+      } //console.log('removed', {hsPosition, position, _position, count, offset, stackFromBottom})
+
     },
     update: update,
     updateNow: updateNow,
-    position: function position(_position, _offset) {
-      if (_position === undefined && _offset === undefined) return [_position2 < 0 ? undefined : _position2, offset];
-      _position2 = _position < 0 ? itemCount + _position : _position !== null && _position !== void 0 ? _position : 0;
-      offset = _stackFromBottom ? _offset === undefined ? _position2 !== maxPosition ? footerHeight : 0 : _offset //? _offset || 0
-      : _offset === undefined ? _position2 ? headerHeight : 0 : _offset; //console.log('position', {position, offset})
+    setStackFromBottom: function setStackFromBottom(_stackFromBottom) {
+      if (_stackFromBottom2 !== _stackFromBottom) {
+        updateNow();
+        _stackFromBottom2 = _stackFromBottom;
+        var allFluid = true;
 
+        if (_stackFromBottom2) {
+          _position2 = hsPosition + hs.length - 1;
+          offset = clientHeight - hsHeight - hsOffset;
+
+          for (var i = hs.length - 1; i >= 0; i--) {
+            if (hs[i].maxHRatio) {
+              _position2--;
+              offset += hs[i].height;
+            } else {
+              allFluid = false;
+              break;
+            }
+          }
+        } else {
+          _position2 = hsPosition;
+          offset = hsOffset;
+
+          var _iterator10 = _createForOfIteratorHelper(hs),
+              _step10;
+
+          try {
+            for (_iterator10.s(); !(_step10 = _iterator10.n()).done;) {
+              var h = _step10.value;
+
+              if (h.maxHRatio) {
+                _position2++;
+                offset += h.height;
+              } else {
+                allFluid = false;
+                break;
+              }
+            }
+          } catch (err) {
+            _iterator10.e(err);
+          } finally {
+            _iterator10.f();
+          }
+        }
+
+        if (allFluid && hs.length === itemCount) {
+          _position2 = -1;
+        }
+      }
+    },
+    position: function position(_position) {
+      var _offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+
+      if (_position === undefined) return [_position2, _stackFromBottom2 ? _position2 !== maxPosition ? offset - footerHeight : offset : _position2 ? offset - headerHeight : offset];
+      _position2 = _position < 0 ? itemCount + _position : _position !== null && _position !== void 0 ? _position : 0;
+      offset = _stackFromBottom2 ? _position2 !== maxPosition ? _offset + footerHeight : _offset : _position2 ? _offset + headerHeight : _offset;
+      console.log('position', {
+        position: _position2,
+        offset: offset
+      });
       update();
+    },
+    positionFromTop: function positionFromTop(_position, _offset) {
+      if (_stackFromBottom2) {
+        vm.setStackFromBottom(false);
+        vm.position(_position, _offset);
+        vm.setStackFromBottom(true);
+      } else {
+        vm.position(_position, _offset);
+      }
+    },
+    positionSmooth: function positionSmooth(positionFn) {
+      var _offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+
+      var _stackFromBottom = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : _stackFromBottom2;
+
+      if (posId) cancelAnimationFrame(posId);
+      if (posResolve) posResolve();
+      var prevPosition, prevOffset;
+      return new Promise(function (resolve) {
+        posResolve = resolve;
+
+        var next = function next() {
+          posId = null;
+
+          if (scrolling || prevPosition === hsPosition && mabs(prevOffset - hsOffset) < 2) {
+            posResolve = null;
+            resolve();
+            return;
+          }
+
+          prevPosition = hsPosition;
+          prevOffset = hsOffset;
+          posPosition = hsPosition;
+          posOffset = hsOffset;
+
+          var positionDelta = 48,
+              //positionDelta = (clientHeight - headerHeight - footerHeight) / 8,
+          _position = (0, _isFunction["default"])(positionFn) ? positionFn() : positionFn;
+
+          if (_position < 0 && (0, _isFunction["default"])(positionFn)) {
+            posResolve = null;
+            resolve();
+            return;
+          }
+
+          if (_position >= hsPosition && _position < hsPosition + hs.length) {
+            var _offset2 = _offset;
+
+            if (_stackFromBottom) {
+              var h = hs[_position - hsPosition];
+              _offset2 = clientHeight - (_position !== maxPosition ? _offset + footerHeight : _offset) - h.height;
+            } else {
+              _offset2 = _position ? _offset + headerHeight : _offset;
+            }
+
+            var hOffset = hsOffset;
+
+            for (var i = 0; i < _position - hsPosition; i++) {
+              hOffset += hs[i].height;
+            }
+
+            var delta = _offset2 - hOffset;
+
+            if (mabs(delta) < 2) {
+              posResolve = null;
+              resolve();
+              return;
+            }
+
+            posOffset = hsOffset + mmin(mabs(delta), positionDelta) * (delta < 0 ? -1 : 1);
+          } else {
+            if (_position < hsPosition) {
+              posOffset = hsOffset + positionDelta;
+            } else {
+              posPosition = hsPosition + hs.length - 1;
+              posOffset = hsOffset + hsHeight - hs[hs.length - 1].height - positionDelta;
+            }
+          }
+
+          update();
+          posId = requestAnimationFrame(next);
+        };
+
+        next();
+      });
     },
     startPosition: function startPosition() {
       return hsPosition;
+    },
+    startOffset: function startOffset() {
+      return hsOffset;
+    },
+    startPart: function startPart() {
+      return hs.length ? hsOffset + hs[0].height - footerHeight : 0;
     },
     endPosition: function endPosition() {
       return hsPosition + hs.length - 1;
@@ -1118,22 +1466,16 @@ function beforeCreate() {
     scrollTop: function scrollTop(top) {
       if (top !== undefined) {
         _position2 = 0;
-        offset = _stackFromBottom ? clientHeight + top - firstHeight : -top; //console.log('scrollTop ->', {position, top, hsOffset})
+        offset = _stackFromBottom2 ? clientHeight + top - firstHeight : -top; //console.log('scrollTop ->', {position, top, hsOffset})
 
         update();
         return;
       }
 
-      var _scrollTop = (scrolling || scrolled) && touching ? doc.scrollTop : hsPosition ? firstHeight + (doc.scrollTop - scrollMax / maxPosition) / (scrollMax - scrollMax / maxPosition) * (scrollMax - firstHeight) : -hsOffset; //console.log('scrollTop <-', {scrolling, scrolled, _scrollTop})
+      var _scrollTop = (scrolling || scrolled) && touched ? doc.scrollTop : hsPosition ? firstHeight + (doc.scrollTop - scrollMax / maxPosition) / (scrollMax - scrollMax / maxPosition) * (scrollMax - firstHeight) : -hsOffset; //console.log('scrollTop <-', {scrolling, scrolled, _scrollTop})
 
 
       return _scrollTop;
-    },
-    offset: function offset(position) {
-      var h = hs[position - hsPosition];
-      if (!h) return; //console.log({t: parseFloat(h.style.top), hsOffset, clientHeight, h: h.height, footerHeight})
-
-      return _stackFromBottom ? clientHeight - parseFloat(h.style.top) - h.height : parseFloat(h.style.top);
     }
   }, this.$options.methods);
 }
