@@ -473,10 +473,10 @@ HistorySource.prototype.onRecyclerChanged = subscribeRecyclerLaidout
 
 export function ProxySource(...srcs) {
     AbstractSource.call(this)
-    
+
     if(Array.isArray(srcs[0])) {
         const fnNames = srcs.shift()
-        
+
         fnNames.forEach((name) => {
             this[name] = (item) => {
                 for (const src of srcs)
@@ -558,7 +558,6 @@ export function ProxySource(...srcs) {
         $on: noop,
         $off: noop,
         $emit: (...args) => this.recycler.$emit(...args),
-        $notify: (...args) => this.recycler.$notify(...args),
 
         get $router() {
             return self.recycler.$router
