@@ -473,6 +473,17 @@ HistorySource.prototype.onRecyclerChanged = subscribeRecyclerLaidout
 
 export function ProxySource(...srcs) {
     AbstractSource.call(this)
+    
+    if(Array.isArray(srcs[0])) {
+        const fnNames = srcs.shift()
+        
+        fnNames.forEach((name) => {
+            this[name] = (item) => {
+                for (const src of srcs)
+                    if (src.indexOf(item) > -1) return src[name](item)
+            }
+        })
+    }
 
     this.srcs = srcs
 
@@ -640,4 +651,3 @@ ProxySource.prototype.onDetach = function () {
     this._onDetach()
 }
 ProxySource.prototype.onRecyclerChanged = subscribeRecyclerLaidout
-
